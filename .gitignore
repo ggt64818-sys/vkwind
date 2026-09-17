@@ -1,0 +1,33 @@
+# Build directories
+build/
+builddir/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Compiled objects
+*.o
+*.obj
+*.dll
+*.lib
+*.exp
+*.pdb
+*.exe
+*.a
+
+# SPIR-V compiled shaders
+*.spv
+
+# Archives / packages
+*.apk
+*.tzst
+*.tz
+*.zip
+
+# OS files
+Thumbs.db
+.DS_Store
