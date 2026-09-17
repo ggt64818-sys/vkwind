@@ -4,7 +4,7 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 
 ## Status
 
-**v0.5.0-beta** — SM3 shader translator 100% complete. All 83/83 opcodes implemented.
+**v0.5.0-async** — SM3 shader translator 100% complete. All 83/83 opcodes implemented.
 
 | Component | Status |
 |---|---|
