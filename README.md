@@ -4,18 +4,18 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 
 ## Status
 
-**v0.5.0-alpha** — Early development. Basic D3D9 games are playable.
+**v0.5.0-beta** — SM3 shader translator 100% complete. All 83/83 opcodes implemented.
 
 | Component | Status |
 |---|---|
 | D3D9 Device | 60+ methods implemented |
 | Vulkan Backend | Instance, device, swapchain, pipeline, command buffers |
-| SM3 Shader Translator | 65/85 opcodes (77%) |
+| SM3 Shader Translator | **83/83 opcodes (100%)** |
 | Draw Calls | DrawPrimitive, DrawIndexedPrimitive, DrawPrimitiveUP |
 | State Mapping | Depth, Stencil, Blend — full mapping |
 | Pipeline Cache | Ring buffer staging, thread-safe |
-| Tests | 39/39 passing |
-| Winlator Integration | APK built and working |
+| Tests | 48/48 passing |
+| Winlator Integration | APK built and ready |
 
 ### Not yet implemented
 
@@ -29,7 +29,7 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 
 ### With Winlator (Android)
 
-1. Install [Winlator](https://github.com/niceDev0908/Winlator) on your Android device
+1. Install [Winlator](https://github.com/ggt64818-sys/winlator/releases/tag/winlator-vkwind) on your Android device
 2. Copy the `d3d9.so` from the [release builds](https://github.com/ggt64818-sys/vkwind/releases) into the Winlator DXVK directory
 3. Launch your D3D9 game through Winlator
 
@@ -94,7 +94,7 @@ vkwind/
 │   │   ├── vk_buffer.*         Buffer management
 │   │   └── vk_image.*          Image/texture management
 │   ├── shader/           SM3 → SPIR-V shader translator
-│   │   ├── d3d9_sm3_translator.*   Main translator (65 opcodes)
+│   │   ├── d3d9_sm3_translator.*   Main translator (83 opcodes)
 │   │   └── shader_translator.*     Base translator framework
 │   └── util/             Logging, configuration
 ├── test/                 Test suites
