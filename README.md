@@ -1,86 +1,137 @@
-# VKWIND v0.5.0-alpha
+# VKWIND
 
-D3D9 → Vulkan translation layer для запуска PC игр на Android через Wine/Winlator.
-Аналог DXVK, фокус на Mali GPU (Helio G99 Ultra / Mali-G57 MC2).
+A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D applications on Android using Wine/Winlator. Designed for ARM64 Mali GPUs (MediaTek Helio G99 Ultra / Mali-G57 MC2).
 
-## Статус
+## Status
 
-**v0.5.0-alpha** — ~40% готовности. Базовые D3D9 игры работают.
+**v0.5.0-alpha** — Early development. Basic D3D9 games are playable.
 
-- ✅ D3D9 Device: ~60+ методов с реальной логикой
-- ✅ Vulkan backend: instance, device, swapchain, pipeline, command buffers
-- ✅ SM3 shader translator: 65/85 опкодов (77%)
-- ✅ DrawPrimitive/DrawIndexedPrimitive/UP — все draw path
-- ✅ Depth/Stencil/Blend — полный mapping
-- ✅ Pipeline cache + ring buffer staging
-- ✅ Thread safety (mutex)
-- ✅ 39 тестов PASS
-- ✅ Winlator integration — APK работает
+| Component | Status |
+|---|---|
+| D3D9 Device | 60+ methods implemented |
+| Vulkan Backend | Instance, device, swapchain, pipeline, command buffers |
+| SM3 Shader Translator | 65/85 opcodes (77%) |
+| Draw Calls | DrawPrimitive, DrawIndexedPrimitive, DrawPrimitiveUP |
+| State Mapping | Depth, Stencil, Blend — full mapping |
+| Pipeline Cache | Ring buffer staging, thread-safe |
+| Tests | 39/39 passing |
+| Winlator Integration | APK built and working |
 
-**Не реализовано:**
-- SM3 addressing (aL, a0, indexed constants)
-- SM4/DXBC (D3D10/11)
+### Not yet implemented
+
+- SM3 addressing modes (aL, a0, indexed constants)
+- SM4/DXBC (D3D10/11) — see [VKWIND11](https://github.com/ggt64818-sys/vkwind11)
 - D3DX routines
 - MSAA, cube maps, 3D textures
 - Palette textures (256-color)
 
-## Запуск
+## How to use
 
-### Windows (тестирование)
+### With Winlator (Android)
+
+1. Install [Winlator](https://github.com/niceDev0908/Winlator) on your Android device
+2. Copy the `d3d9.so` from the [release builds](https://github.com/ggt64818-sys/vkwind/releases) into the Winlator DXVK directory
+3. Launch your D3D9 game through Winlator
+
+### With Wine (Linux / Windows)
+
+Copy `d3d9.dll` (or `libd3d9.so`) next to the game executable.
+
+## Build instructions
+
+### Requirements
+
+- [Meson](https://mesonbuild.com/) build system (>= 0.58)
+- [Ninja](https://ninja-build.org/) backend
+- [MinGW-w64](https://www.mingw-w64.org/) cross-compiler (for Windows/Android builds)
+- [Vulkan SDK](https://vulkan.lunarg.com/) headers and libraries
+
+### Windows (testing)
+
 ```bash
 meson setup build
 meson compile -C build
-# d3d9.dll готов — положить рядом с .exe игры
+# d3d9.dll is in build/
 ```
 
 ### Android (ARM64)
+
 ```bash
 meson setup build-android --cross-file android-arm64.txt
 ninja -C build-android
-# d3d9.so — упаковать в Winlator
+# libd3d9.so is in build-android/
 ```
 
-## Конфигурация
+## Configuration
 
-| Переменная | По умолчанию | Описание |
+Environment variables control runtime behavior:
+
+| Variable | Default | Description |
 |---|---|---|
 | `VKWIND_LOG_LEVEL` | `2` | 0=Off, 1=Error, 2=Warn, 3=Info, 4=Debug, 5=Trace |
-| `VKWIND_LOG_FILE` | — | Логировать в файл |
-| `VKWIND_VALIDATION` | `false` | Vulkan validation layers |
-| `VKWIND_VSYNC` | `true` | VSync |
+| `VKWIND_LOG_FILE` | — | Log to file |
+| `VKWIND_VALIDATION` | `false` | Enable Vulkan validation layers |
+| `VKWIND_VSYNC` | `true` | Enable VSync |
 
-## Структура
+## Project structure
 
 ```
 vkwind/
 ├── src/
-│   ├── d3d9/           # D3D9 API (~60 файлов)
-│   │   ├── d3d9_device.*       # IDirect3DDevice9 — основной файл
-│   │   ├── d3d9_types.h        # Все D3D9 типы
-│   │   ├── d3d9_texture.*      # Текстуры
-│   │   ├── d3d9_shader.*       # Шейдеры
-│   │   └── ...
-│   ├── vulkan/         # Vulkan backend (~16 файлов)
-│   │   ├── vk_pipeline.*       # Pipeline + cache
-│   │   ├── vk_cmd_buffer.*     # Command buffers + ring staging
-│   │   ├── vk_swapchain.*      # Swapchain
-│   │   └── ...
-│   ├── shader/         # SM3 → SPIR-V translator
-│   │   └── d3d9_sm3_translator.*  # ~65 опкодов
-│   └── util/           # Логирование, конфигурация
-├── test/               # 39 тестов (SPIR-V + pipeline)
-├── android-stub/       # Vulkan stubs для Android
-└── winlator-package/   # Winlator integration
+│   ├── d3d9/             Direct3D 9 API implementation
+│   │   ├── d3d9_device.*       IDirect3DDevice9
+│   │   ├── d3d9_types.h        D3D9 type definitions
+│   │   ├── d3d9_texture.*      Texture management
+│   │   ├── d3d9_shader.*       Shader handling
+│   │   ├── d3d9_state.*        Render state
+│   │   └── d3d9_swapchain.*    Swap chain
+│   ├── vulkan/           Vulkan backend
+│   │   ├── vk_device.*         Vulkan device management
+│   │   ├── vk_pipeline.*       Graphics pipeline + cache
+│   │   ├── vk_cmd_buffer.*     Command buffers + ring staging
+│   │   ├── vk_swapchain.*      Swap chain management
+│   │   ├── vk_memory.*         Memory allocation
+│   │   ├── vk_buffer.*         Buffer management
+│   │   └── vk_image.*          Image/texture management
+│   ├── shader/           SM3 → SPIR-V shader translator
+│   │   ├── d3d9_sm3_translator.*   Main translator (65 opcodes)
+│   │   └── shader_translator.*     Base translator framework
+│   └── util/             Logging, configuration
+├── test/                 Test suites
+├── android-stub/         Vulkan stubs for Android builds
+├── winlator-package/     Winlator integration files
+└── android-arm64.txt     Android cross-compilation file
 ```
 
-## Тесты
+## Running tests
 
 ```bash
 meson setup build && meson compile -C build
-cd build && ./test_spirv_validation    # 19 тестов
-./test_pipeline_integration            # 20 тестов
+cd build
+
+# Shader translation tests (19 tests)
+./test_spirv_validation
+
+# Pipeline integration tests (20 tests)
+./test_pipeline_integration
 ```
 
-## Лицензия
+## Environment
+
+**Target hardware:** MediaTek Helio G99 Ultra / ARM Mali-G57 MC2
+- 128 GFLOPS, 32 execution units
+- Vulkan 1.1 support
+- 6 GB RAM
+
+**Target games:**
+- GTA San Andreas — 30 FPS
+- NFS Underground 2 — 60 FPS
+- Other D3D9 era titles (2002–2008)
+
+## Contributing
+
+Contributions are welcome. Please open an issue before submitting large changes.
+
+## License
 
 MIT
