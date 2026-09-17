@@ -1,5 +1,5 @@
 project('vkwind', 'cpp',
-  version : '0.5.0-alpha',
+  version : '0.5.0-async',
   license : 'MIT',
   default_options : [
     'cpp_std=c++20',
