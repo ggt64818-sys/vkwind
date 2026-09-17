@@ -15,12 +15,53 @@ public:
   void clear();
 
 private:
+  uint32_t m_type = 0;
   uint32_t m_renderStates[256] = {};
   D3DMATRIX m_transforms[256] = {};
   D3DMATERIAL9 m_material = {};
+  D3DVIEWPORT9 m_viewport = {};
+  D3D9Device::ScissorRect m_scissor = {};
+  bool m_scissorEnabled = false;
+  uint32_t m_textureStageStates[8][32] = {};
+  uint32_t m_samplerStates[8][14] = {};
+  IDirect3DBaseTexture9* m_textures[8] = {};
+  float m_clipPlanes[6][4] = {};
+  struct LightState {
+    D3DLIGHT9 light = {};
+    bool enabled = false;
+    bool defined = false;
+  };
+  LightState m_lights[8] = {};
+  struct StreamSource {
+    IDirect3DVertexBuffer9* buffer = nullptr;
+    uint32_t offset = 0;
+    uint32_t stride = 0;
+  };
+  StreamSource m_streamSources[16] = {};
+  uint32_t m_fvf = 0;
+  IDirect3DIndexBuffer9* m_indexBuffer = nullptr;
+  IDirect3DPixelShader9* m_pixelShader = nullptr;
+  IDirect3DVertexShader9* m_vertexShader = nullptr;
+  float m_vsFloatConstants[256 * 4] = {};
+  float m_psFloatConstants[256 * 4] = {};
+  int32_t m_vsIntConstants[16 * 4] = {};
+  int32_t m_psIntConstants[16 * 4] = {};
+  int32_t m_vsBoolConstants[16] = {};
+  int32_t m_psBoolConstants[16] = {};
+
   bool m_hasRenderStates = false;
   bool m_hasTransforms = false;
   bool m_hasMaterial = false;
+  bool m_hasViewport = false;
+  bool m_hasScissor = false;
+  bool m_hasTextureStageStates = false;
+  bool m_hasSamplerStates = false;
+  bool m_hasTextures = false;
+  bool m_hasClipPlanes = false;
+  bool m_hasLights = false;
+  bool m_hasStreamSources = false;
+  bool m_hasIndexBuffer = false;
+  bool m_hasShaders = false;
 };
 
 // D3D9 swap chain wrapper

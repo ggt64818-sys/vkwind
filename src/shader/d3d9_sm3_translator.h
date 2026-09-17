@@ -278,6 +278,9 @@ private:
   uint32_t m_texImageType = 0;
   uint32_t m_texSampledImageType = 0;
 
+  // FragDepth output (for TEXDEPTH opcode)
+  uint32_t m_fragDepthVar = 0;
+
   // SPIR-V IDs
   uint32_t m_nextId = 1;
 

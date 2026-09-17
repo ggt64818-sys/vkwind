@@ -1956,21 +1956,29 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
     }
 
     case SM3_OP_TEXDEPTH: {
-      // TEXDEPTH: writes r.x to fragment depth
-      // In SPIR-V we'd need to write to gl_FragDepth, but that requires
-      // the FragDepth decoration and an Output variable. For now, we
-      // store the depth value in a private variable for potential later use.
-      // Actual depth output requires VK_KHR_depth_stencil_resolve or
-      // writing to gl_FragDepth in the fragment shader.
-      uint32_t src = emit_load_register(inst.dest); // TEXDEPTH reads from r register
+      // TEXDEPTH: writes r.x to fragment depth (gl_FragDepth)
+      uint32_t src = emit_load_register(inst.dest);
       uint32_t depthX = S.compositeExtract(m_floatType, src, 0);
       // Clamp to [0, 1]
       uint32_t zero = S.constant(m_floatType, 0);
       uint32_t one = S.constant(m_floatType, 0x3F800000);
       uint32_t clampedDepth = S.fclamp(m_floatType, depthX, zero, one);
-      // Store as vec4 in temp for potential use by later instructions
-      uint32_t depthVec = S.compositeConstruct(m_vec4, {clampedDepth, zero, zero, one});
-      emit_store_register(inst.dest, depthVec);
+
+      // Create or reuse FragDepth output variable
+      if (!m_fragDepthVar) {
+        auto prevSection = S.currentSection;
+        S.setSection(SpirvEmitter::SEC_TYPES);
+        uint32_t ptrType = S.alloc();
+        S.typePointer(ptrType, 3, m_floatType); // Output storage class, float
+        S.setSection(SpirvEmitter::SEC_VARIABLES);
+        m_fragDepthVar = S.variable(ptrType, 3);
+        S.setSection(SpirvEmitter::SEC_ANNOTATIONS);
+        S.decorate(m_fragDepthVar, 11, 52); // BuiltIn FragDepth
+        S.setSection(SpirvEmitter::SEC_DEBUG);
+        S.name(m_fragDepthVar, "gl_FragDepth");
+        S.currentSection = prevSection;
+      }
+      S.store(m_fragDepthVar, clampedDepth);
       break;
     }
 
@@ -2745,6 +2753,8 @@ std::vector<uint32_t> SM3Translator::generate_spirv() {
     for (auto& [idx, id] : m_inputVars) interfaces.push_back(id);
     // All output variables
     for (auto& [idx, id] : m_outputVars) interfaces.push_back(id);
+    // FragDepth output (if TEXDEPTH was used)
+    if (m_fragDepthVar) interfaces.push_back(m_fragDepthVar);
 
     uint32_t wordCount = 3 + nameWords + (uint32_t)interfaces.size();
     S.op(15, wordCount);

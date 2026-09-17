@@ -52,7 +52,15 @@ int D3D9Surface::GetContainer(const void* riid, void** ppContainer) {
 }
 
 int D3D9Surface::GetDesc(void* pDesc) {
-  (void)pDesc;
+  if (!pDesc) return D3DERR_INVALIDCALL;
+  auto* desc = static_cast<D3DSURFACE_DESC*>(pDesc);
+  desc->Format = m_format;
+  desc->Type = D3DRTYPE_SURFACE;
+  desc->Usage = 0;
+  desc->Pool = D3DPOOL_SYSTEMMEM;
+  desc->MultiSampleType = D3DMULTISAMPLE_NONE;
+  desc->Width = m_width;
+  desc->Height = m_height;
   return D3D_OK;
 }
 

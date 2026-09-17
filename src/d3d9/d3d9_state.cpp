@@ -9,23 +9,231 @@ static const char* kTag = "D3D9State";
 // --- StateBlock ---
 
 void D3D9StateBlock::capture(D3D9Device* device, uint32_t type) {
-  // TODO: Capture full state from device
-  m_hasRenderStates = true;
-  m_hasTransforms = true;
-  m_hasMaterial = true;
+  m_type = type;
+
+  // Capture render states (D3DRS_*)
+  if (type & 0x00000001) { // D3D9SB_ALL
+    memcpy(m_renderStates, device->m_renderStates, sizeof(m_renderStates));
+    m_hasRenderStates = true;
+  }
+
+  // Capture transforms (D3DTS_*)
+  if (type & 0x00000002) {
+    memcpy(m_transforms, device->m_transforms, sizeof(m_transforms));
+    m_hasTransforms = true;
+  }
+
+  // Capture material
+  if (type & 0x00000004) {
+    m_material = device->m_material;
+    m_hasMaterial = true;
+  }
+
+  // Capture viewport
+  if (type & 0x00000008) {
+    m_viewport = device->m_viewport;
+    m_hasViewport = true;
+  }
+
+  // Capture scissor
+  if (type & 0x00000010) {
+    m_scissor = device->m_scissor;
+    m_scissorEnabled = device->m_scissorEnabled;
+    m_hasScissor = true;
+  }
+
+  // Capture texture stage states
+  if (type & 0x00000020) {
+    memcpy(m_textureStageStates, device->m_textureStageStates, sizeof(m_textureStageStates));
+    m_hasTextureStageStates = true;
+  }
+
+  // Capture sampler states
+  if (type & 0x00000040) {
+    memcpy(m_samplerStates, device->m_samplerStates, sizeof(m_samplerStates));
+    m_hasSamplerStates = true;
+  }
+
+  // Capture textures
+  if (type & 0x00000080) {
+    for (int i = 0; i < 8; i++) {
+      m_textures[i] = device->m_textures[i];
+      if (m_textures[i]) m_textures[i]->AddRef();
+    }
+    m_hasTextures = true;
+  }
+
+  // Capture clip planes
+  if (type & 0x00000100) {
+    memcpy(m_clipPlanes, device->m_clipPlanes, sizeof(m_clipPlanes));
+    m_hasClipPlanes = true;
+  }
+
+  // Capture lights
+  if (type & 0x00000200) {
+    memcpy(m_lights, device->m_lights, sizeof(m_lights));
+    m_hasLights = true;
+  }
+
+  // Capture stream source
+  if (type & 0x00000400) {
+    memcpy(m_streamSources, device->m_streamSources, sizeof(m_streamSources));
+    m_fvf = device->m_fvf;
+    m_hasStreamSources = true;
+  }
+
+  // Capture index buffer
+  if (type & 0x00000800) {
+    m_indexBuffer = device->m_indexBuffer;
+    if (m_indexBuffer) m_indexBuffer->AddRef();
+    m_hasIndexBuffer = true;
+  }
+
+  // Capture pixel/vertex shader
+  if (type & 0x00001000) {
+    m_pixelShader = device->m_pixelShader;
+    if (m_pixelShader) m_pixelShader->AddRef();
+    m_vertexShader = device->m_vertexShader;
+    if (m_vertexShader) m_vertexShader->AddRef();
+    memcpy(m_vsFloatConstants, device->m_vsFloatConstants, sizeof(m_vsFloatConstants));
+    memcpy(m_psFloatConstants, device->m_psFloatConstants, sizeof(m_psFloatConstants));
+    memcpy(m_vsIntConstants, device->m_vsIntConstants, sizeof(m_vsIntConstants));
+    memcpy(m_psIntConstants, device->m_psIntConstants, sizeof(m_psIntConstants));
+    memcpy(m_vsBoolConstants, device->m_vsBoolConstants, sizeof(m_vsBoolConstants));
+    memcpy(m_psBoolConstants, device->m_psBoolConstants, sizeof(m_psBoolConstants));
+    m_hasShaders = true;
+  }
 }
 
 void D3D9StateBlock::apply(D3D9Device* device) {
+  // Apply render states
+  if (m_hasRenderStates) {
+    for (uint32_t i = 0; i < 256; i++) {
+      if (m_renderStates[i] != 0 || i == 0) {
+        device->SetRenderState(i, m_renderStates[i]);
+      }
+    }
+  }
+
+  // Apply transforms
+  if (m_hasTransforms) {
+    for (uint32_t i = 0; i < 256; i++) {
+      device->SetTransform(i, &m_transforms[i]);
+    }
+  }
+
+  // Apply material
   if (m_hasMaterial) {
     device->SetMaterial(&m_material);
   }
-  // TODO: Apply render states and transforms
+
+  // Apply viewport
+  if (m_hasViewport) {
+    device->SetViewport(&m_viewport);
+  }
+
+  // Apply scissor
+  if (m_hasScissor) {
+    if (m_scissorEnabled) {
+      device->SetScissorRect(&m_scissor);
+    }
+  }
+
+  // Apply texture stage states
+  if (m_hasTextureStageStates) {
+    for (uint32_t stage = 0; stage < 8; stage++) {
+      for (uint32_t state = 0; state < 32; state++) {
+        if (m_textureStageStates[stage][state] != 0) {
+          device->SetTextureStageState(stage, state, m_textureStageStates[stage][state]);
+        }
+      }
+    }
+  }
+
+  // Apply sampler states
+  if (m_hasSamplerStates) {
+    for (uint32_t sampler = 0; sampler < 8; sampler++) {
+      for (uint32_t state = 0; state < 14; state++) {
+        device->SetSamplerState(sampler, state, m_samplerStates[sampler][state]);
+      }
+    }
+  }
+
+  // Apply textures
+  if (m_hasTextures) {
+    for (int i = 0; i < 8; i++) {
+      device->SetTexture(i, m_textures[i]);
+      if (m_textures[i]) m_textures[i]->Release();
+      m_textures[i] = nullptr;
+    }
+  }
+
+  // Apply clip planes
+  if (m_hasClipPlanes) {
+    for (uint32_t i = 0; i < 6; i++) {
+      device->SetClipPlane(i, m_clipPlanes[i]);
+    }
+  }
+
+  // Apply lights
+  if (m_hasLights) {
+    for (int i = 0; i < 8; i++) {
+      if (m_lights[i].defined) {
+        device->SetLight(i, &m_lights[i].light);
+        device->LightEnable(i, m_lights[i].enabled);
+      }
+    }
+  }
+
+  // Apply stream sources
+  if (m_hasStreamSources) {
+    for (uint32_t i = 0; i < 16; i++) {
+      if (m_streamSources[i].buffer) {
+        device->SetStreamSource(i, m_streamSources[i].buffer,
+                                m_streamSources[i].offset, m_streamSources[i].stride);
+      }
+    }
+    device->SetFVF(m_fvf);
+  }
+
+  // Apply index buffer
+  if (m_hasIndexBuffer && m_indexBuffer) {
+    device->SetIndices(m_indexBuffer);
+    m_indexBuffer->Release();
+    m_indexBuffer = nullptr;
+  }
+
+  // Apply shaders
+  if (m_hasShaders) {
+    if (m_pixelShader) {
+      device->SetPixelShader(m_pixelShader);
+      m_pixelShader->Release();
+      m_pixelShader = nullptr;
+    }
+    if (m_vertexShader) {
+      device->SetVertexShader(m_vertexShader);
+      m_vertexShader->Release();
+      m_vertexShader = nullptr;
+    }
+    device->SetVertexShaderConstant(0, m_vsFloatConstants, 256);
+    device->SetPixelShaderConstant(0, m_psFloatConstants, 256);
+  }
 }
 
 void D3D9StateBlock::clear() {
   m_hasRenderStates = false;
   m_hasTransforms = false;
   m_hasMaterial = false;
+  m_hasViewport = false;
+  m_hasScissor = false;
+  m_hasTextureStageStates = false;
+  m_hasSamplerStates = false;
+  m_hasTextures = false;
+  m_hasClipPlanes = false;
+  m_hasLights = false;
+  m_hasStreamSources = false;
+  m_hasIndexBuffer = false;
+  m_hasShaders = false;
 }
 
 // --- SwapChain ---

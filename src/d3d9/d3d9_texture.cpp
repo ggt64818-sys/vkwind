@@ -1,4 +1,5 @@
 #include "d3d9_texture.h"
+#include "d3d9_surface.h"
 #include "../util/util_log.h"
 #include <cstring>
 
@@ -88,13 +89,24 @@ uint32_t D3D9Texture::GetLOD() { return 0; }
 uint32_t D3D9Texture::GetLevelCount() { return m_levels; }
 
 uint32_t D3D9Texture::GetLevelDesc(uint32_t Level, void* pDesc) {
-  (void)Level; (void)pDesc;
+  if (Level >= m_levels || !pDesc) return D3DERR_INVALIDCALL;
+  auto* desc = static_cast<D3DSURFACE_DESC*>(pDesc);
+  desc->Format = m_format;
+  desc->Type = D3DRTYPE_TEXTURE;
+  desc->Usage = m_usage;
+  desc->Pool = m_pool;
+  desc->MultiSampleType = D3DMULTISAMPLE_NONE;
+  desc->Width = std::max(1u, m_width >> Level);
+  desc->Height = std::max(1u, m_height >> Level);
   return D3D_OK;
 }
 
 uint32_t D3D9Texture::GetSurfaceLevel(uint32_t Level, IDirect3DSurface9** ppSurfaceLevel) {
-  (void)Level;
-  *ppSurfaceLevel = nullptr;
+  if (Level >= m_levels || !ppSurfaceLevel) return D3DERR_INVALIDCALL;
+  uint32_t w = std::max(1u, m_width >> Level);
+  uint32_t h = std::max(1u, m_height >> Level);
+  auto* surface = new D3D9Surface(m_device, w, h, m_format);
+  *ppSurfaceLevel = surface;
   return D3D_OK;
 }
 

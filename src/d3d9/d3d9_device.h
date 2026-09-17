@@ -21,7 +21,10 @@
 
 namespace vkwind {
 
+class D3D9StateBlock;
+
 class D3D9Device : public IDirect3DDevice9 {
+  friend class D3D9StateBlock;
 public:
   D3D9Device(IDirect3D9* d3d, const D3DPRESENT_PARAMETERS* params);
   ~D3D9Device();
