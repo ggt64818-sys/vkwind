@@ -1208,6 +1208,243 @@ static std::vector<uint32_t> build_test_ps_expp_logp() {
 }
 
 // ============================================================
+// Test 20: PS with SINCOS (sine/cosine)
+// sincos r1.x, r0.x  — opcode 37, length=3
+// ============================================================
+static std::vector<uint32_t> build_test_ps_sincos() {
+  std::vector<uint32_t> code;
+  code.push_back(PS_3_0_TOKEN);
+
+  // dcl_texcoord v0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(5));
+  code.push_back(encode_dst_reg(SM3_REG_INPUT, 0));
+
+  // dcl oC0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(10));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+
+  // def c0, 3.14159, 0.0, 0.0, 0.0
+  code.push_back(encode_inst_token(66, 6));
+  code.push_back(encode_dst_reg(SM3_REG_CONST, 0));
+  uint32_t pi_bits;
+  { float pi = 3.14159f; memcpy(&pi_bits, &pi, 4); }
+  code.push_back(pi_bits);
+  code.push_back(0);
+  code.push_back(0);
+  code.push_back(0);
+
+  // tex r0, t0
+  code.push_back(encode_inst_token(51, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEXTURE, 0));
+
+  // sincos r1.x, r0.x  -- opcode 37, length=3 (only src[0] is used)
+  code.push_back(encode_inst_token(37, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 1, 0x1));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 0));
+
+  // mov oC0, r1
+  code.push_back(encode_inst_token(1, 3));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 1));
+
+  code.push_back(END_TOKEN);
+  return code;
+}
+
+// ============================================================
+// Test 21: VS with M4x4 (4x4 matrix multiply)
+// m4x4 oPos, v0, c0  — opcode 20, length=4
+// ============================================================
+static std::vector<uint32_t> build_test_vs_m4x4() {
+  std::vector<uint32_t> code;
+  code.push_back(VS_3_0_TOKEN);
+
+  // dcl_position v0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(0));
+  code.push_back(encode_dst_reg(SM3_REG_INPUT, 0));
+
+  // dcl_position o0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(0));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+
+  // def c0-c3 (identity matrix)
+  for (int row = 0; row < 4; row++) {
+    code.push_back(encode_inst_token(66, 6));
+    code.push_back(encode_dst_reg(SM3_REG_CONST, row));
+    for (int col = 0; col < 4; col++) {
+      uint32_t bits;
+      float val = (row == col) ? 1.0f : 0.0f;
+      memcpy(&bits, &val, 4);
+      code.push_back(bits);
+    }
+  }
+
+  // m4x4 oPos, v0, c0  -- opcode 20, length=4
+  code.push_back(encode_inst_token(20, 4));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_INPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_CONST, 0));
+
+  code.push_back(END_TOKEN);
+  return code;
+}
+
+// ============================================================
+// Test 22: PS with REP/ENDREP (repeat loop)
+// rep i0, c0.x  ... endrep  — opcodes 38/39
+// ============================================================
+static std::vector<uint32_t> build_test_ps_rep_endrep() {
+  std::vector<uint32_t> code;
+  code.push_back(PS_3_0_TOKEN);
+
+  // dcl_texcoord v0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(5));
+  code.push_back(encode_dst_reg(SM3_REG_INPUT, 0));
+
+  // dcl oC0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(10));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+
+  // def c0, 4.0, 0.0, 0.0, 0.0
+  code.push_back(encode_inst_token(66, 6));
+  code.push_back(encode_dst_reg(SM3_REG_CONST, 0));
+  uint32_t four;
+  { float f4 = 4.0f; memcpy(&four, &f4, 4); }
+  code.push_back(four);
+  code.push_back(0);
+  code.push_back(0);
+  code.push_back(0);
+
+  // def_i i0, 0
+  code.push_back(encode_inst_token(48, 6));
+  code.push_back(encode_dst_reg(SM3_REG_CONST_INT, 0));
+  code.push_back(0);
+  code.push_back(0);
+  code.push_back(0);
+  code.push_back(0);
+
+  // tex r0, t0
+  code.push_back(encode_inst_token(51, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEXTURE, 0));
+
+  // mov r1, c1  (clear accumulator)
+  code.push_back(encode_inst_token(1, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 1));
+  code.push_back(encode_src_reg(SM3_REG_CONST, 1));
+
+  // rep i0, c0.x  -- opcode 38, length=3
+  code.push_back(encode_inst_token(38, 3));
+  code.push_back(encode_src_reg(SM3_REG_CONST_INT, 0));
+  code.push_back(encode_src_reg(SM3_REG_CONST, 0, 0, 0, 0, 0));
+
+  // add r1, r1, r0  -- accumulate
+  code.push_back(encode_inst_token(2, 4));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 1));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 1));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 0));
+
+  // endrep  -- opcode 39, length=1
+  code.push_back(encode_inst_token(39, 1));
+
+  // mov oC0, r1
+  code.push_back(encode_inst_token(1, 3));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 1));
+
+  code.push_back(END_TOKEN);
+  return code;
+}
+
+// ============================================================
+// Test 23: PS with TEXBEM (bump environment mapping)
+// texbem r0, s0, t0  — opcode 52, length=3
+// ============================================================
+static std::vector<uint32_t> build_test_ps_texbem() {
+  std::vector<uint32_t> code;
+  code.push_back(PS_3_0_TOKEN);
+
+  // dcl_texcoord v0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(5));
+  code.push_back(encode_dst_reg(SM3_REG_INPUT, 0));
+
+  // dcl oC0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(10));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+
+  // texbem r0, t0  -- opcode 52, length=3 (dest + 1 src)
+  code.push_back(encode_inst_token(52, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEXTURE, 0));
+
+  // mov oC0, r0
+  code.push_back(encode_inst_token(1, 3));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 0));
+
+  code.push_back(END_TOKEN);
+  return code;
+}
+
+// ============================================================
+// Test 24: PS with ABS + NRM (absolute + normalize)
+// abs r1, r0  -- opcode 35, length=3
+// nrm r2, r0  -- opcode 36, length=3
+// ============================================================
+static std::vector<uint32_t> build_test_ps_abs_nrm() {
+  std::vector<uint32_t> code;
+  code.push_back(PS_3_0_TOKEN);
+
+  // dcl_texcoord v0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(5));
+  code.push_back(encode_dst_reg(SM3_REG_INPUT, 0));
+
+  // dcl oC0
+  code.push_back(encode_inst_token(31, 3));
+  code.push_back(encode_usage_token(10));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+
+  // tex r0, t0
+  code.push_back(encode_inst_token(51, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEXTURE, 0));
+
+  // abs r1, r0  -- opcode 35, length=3
+  code.push_back(encode_inst_token(35, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 1));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 0));
+
+  // nrm r2, r0  -- opcode 36, length=3
+  code.push_back(encode_inst_token(36, 3));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 2));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 0));
+
+  // add r3, r1, r2
+  code.push_back(encode_inst_token(2, 4));
+  code.push_back(encode_dst_reg(SM3_REG_TEMP, 3));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 1));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 2));
+
+  // mov oC0, r3
+  code.push_back(encode_inst_token(1, 3));
+  code.push_back(encode_dst_reg(SM3_REG_OUTPUT, 0));
+  code.push_back(encode_src_reg(SM3_REG_TEMP, 3));
+
+  code.push_back(END_TOKEN);
+  return code;
+}
+
+// ============================================================
 // Main
 // ============================================================
 int main() {
@@ -1238,6 +1475,11 @@ int main() {
     {"PS SGN+CND+DP2ADD",       build_test_ps_sgn_cnd_dp2add()},
     {"PS TEXKILL",              build_test_ps_texkill()},
     {"PS EXPP+LOGP",            build_test_ps_expp_logp()},
+    {"PS SINCOS",               build_test_ps_sincos()},
+    {"VS M4x4",                 build_test_vs_m4x4()},
+    {"PS REP/ENDREP",           build_test_ps_rep_endrep()},
+    {"PS TEXBEM",               build_test_ps_texbem()},
+    {"PS ABS+NRM",              build_test_ps_abs_nrm()},
   };
 
   int passed = 0;

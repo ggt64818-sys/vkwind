@@ -1550,9 +1550,55 @@ int D3D9Device::GetFrontBufferData(uint32_t iSwapChain, IDirect3DSurface9* pDest
   (void)iSwapChain;
   if (!pDestSurface) return static_cast<int>(D3DERR_INVALIDCALL);
 
-  // For now, return D3D_OK — front buffer readback requires staging image from swapchain
-  // Most games don't use GetFrontBufferData in the hot path
-  VKWIND_DBG(kTag, "GetFrontBufferData called (stub)");
+  // Copy current render target contents to destination surface
+  // This is a CPU-side copy from the back buffer's locked data
+  if (m_renderTargets[0]) {
+    D3DSURFACE_DESC srcDesc = {};
+    m_renderTargets[0]->GetDesc(&srcDesc);
+
+    D3DLOCKED_RECT srcLocked = {};
+    int srcRes = m_renderTargets[0]->LockRect(&srcLocked, nullptr, D3DLOCK_READONLY);
+    if (SUCCEEDED(srcRes)) {
+      D3DLOCKED_RECT dstLocked = {};
+      int dstRes = pDestSurface->LockRect(&dstLocked, nullptr, 0);
+      if (SUCCEEDED(dstRes)) {
+        uint32_t bpp = 4;
+        if (srcDesc.Format == D3DFMT_R8G8B8 || srcDesc.Format == D3DFMT_X8R8G8B8) bpp = 3;
+        else if (srcDesc.Format == D3DFMT_R5G6B5 || srcDesc.Format == D3DFMT_X1R5G5B5 || srcDesc.Format == D3DFMT_A1R5G5B5) bpp = 2;
+
+        uint32_t width = srcDesc.Width;
+        uint32_t height = srcDesc.Height;
+        uint32_t srcPitch = srcLocked.Pitch;
+        uint32_t dstPitch = dstLocked.Pitch;
+        uint32_t rowBytes = width * bpp;
+
+        const uint8_t* srcRow = static_cast<const uint8_t*>(srcLocked.pBits);
+        uint8_t* dstRow = static_cast<uint8_t*>(dstLocked.pBits);
+        for (uint32_t y = 0; y < height; ++y) {
+          memcpy(dstRow, srcRow, rowBytes);
+          srcRow += srcPitch;
+          dstRow += dstPitch;
+        }
+        pDestSurface->UnlockRect();
+      }
+      m_renderTargets[0]->UnlockRect();
+    }
+  } else {
+    // No render target bound — fill destination with black
+    D3DLOCKED_RECT dstLocked = {};
+    int dstRes = pDestSurface->LockRect(&dstLocked, nullptr, 0);
+    if (SUCCEEDED(dstRes)) {
+      D3DSURFACE_DESC dstDesc = {};
+      pDestSurface->GetDesc(&dstDesc);
+      uint32_t height = dstDesc.Height;
+      for (uint32_t y = 0; y < height; ++y) {
+        memset(static_cast<uint8_t*>(dstLocked.pBits) + y * dstLocked.Pitch, 0, dstLocked.Pitch);
+      }
+      pDestSurface->UnlockRect();
+    }
+  }
+
+  VKWIND_DBG(kTag, "GetFrontBufferData: copied front buffer");
   return static_cast<int>(D3D_OK);
 }
 

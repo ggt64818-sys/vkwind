@@ -759,6 +759,144 @@ static int test_vertex_decl_strides() {
 }
 
 // ============================================================================
+// Additional State Mapper Tests
+// ============================================================================
+
+static int test_state_mapper_alpha_blend() {
+  printf("--- StateMapper: alpha blend enable/disable ---\n");
+
+  int errors = 0;
+
+  // Test 1: Alpha blend disabled (default)
+  {
+    uint32_t renderStates[256] = {};
+    renderStates[D3DRS_ALPHABLENDENABLE] = FALSE;
+    PipelineState state;
+    StateMapper::map_render_states(renderStates, state);
+    if (state.blendEnable) { printf("  FAIL: blendEnable=true when ALPHABLENDENABLE=0\n"); errors++; }
+  }
+
+  // Test 2: Alpha blend enabled
+  {
+    uint32_t renderStates[256] = {};
+    renderStates[D3DRS_ALPHABLENDENABLE] = TRUE;
+    renderStates[D3DRS_SRCBLEND] = D3DBLEND_SRCALPHA;
+    renderStates[D3DRS_DESTBLEND] = D3DBLEND_INVSRCALPHA;
+    PipelineState state;
+    StateMapper::map_render_states(renderStates, state);
+    if (!state.blendEnable) { printf("  FAIL: blendEnable=false when ALPHABLENDENABLE=1\n"); errors++; }
+    if (state.srcColorBlend != VK_BLEND_FACTOR_SRC_ALPHA) { printf("  FAIL: srcColorBlend != SRC_ALPHA\n"); errors++; }
+    if (state.dstColorBlend != VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA) { printf("  FAIL: dstColorBlend != INV_SRC_ALPHA\n"); errors++; }
+  }
+
+  // Test 3: Separate alpha blend
+  {
+    uint32_t renderStates[256] = {};
+    renderStates[D3DRS_ALPHABLENDENABLE] = TRUE;
+    renderStates[D3DRS_SRCBLEND] = D3DBLEND_ONE;
+    renderStates[D3DRS_DESTBLEND] = D3DBLEND_ZERO;
+    renderStates[D3DRS_SEPARATEALPHABLENDENABLE] = TRUE;
+    renderStates[D3DRS_SRCBLENDALPHA] = D3DBLEND_SRCALPHA;
+    renderStates[D3DRS_DESTBLENDALPHA] = D3DBLEND_INVSRCALPHA;
+    PipelineState state;
+    StateMapper::map_render_states(renderStates, state);
+    if (state.srcColorBlend != VK_BLEND_FACTOR_ONE) { printf("  FAIL: srcColorBlend != ONE\n"); errors++; }
+    if (state.srcAlphaBlend != VK_BLEND_FACTOR_SRC_ALPHA) { printf("  FAIL: srcAlphaBlend != SRC_ALPHA\n"); errors++; }
+    if (state.dstAlphaBlend != VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA) { printf("  FAIL: dstAlphaBlend != INV_SRC_ALPHA\n"); errors++; }
+  }
+
+  printf("  alpha blend %s\n", errors ? "FAIL" : "PASS");
+  return errors;
+}
+
+static int test_state_mapper_all_defaults() {
+  printf("--- StateMapper: all defaults (empty render states) ---\n");
+
+  uint32_t renderStates[256] = {};
+  PipelineState state;
+  StateMapper::map_render_states(renderStates, state);
+
+  int errors = 0;
+  if (state.depthTestEnable) { printf("  FAIL: depthTestEnable=true (should be false)\n"); errors++; }
+  if (state.depthWriteEnable) { printf("  FAIL: depthWriteEnable=true (should be false)\n"); errors++; }
+  if (state.cullMode != VK_CULL_MODE_BACK_BIT) { printf("  FAIL: cullMode=%d, expected BACK_BIT (default)\n", (int)state.cullMode); errors++; }
+  if (state.blendEnable) { printf("  FAIL: blendEnable=true (should be false)\n"); errors++; }
+  if (state.stencilTestEnable) { printf("  FAIL: stencilTestEnable=true (should be false)\n"); errors++; }
+
+  printf("  all defaults %s\n", errors ? "FAIL" : "PASS");
+  return errors;
+}
+
+static int test_state_mapper_two_sided_stencil() {
+  printf("--- StateMapper: two-sided stencil ---\n");
+
+  uint32_t renderStates[256] = {};
+  renderStates[D3DRS_STENCILENABLE] = TRUE;
+  renderStates[D3DRS_STENCILFUNC] = D3DCMP_ALWAYS;
+  renderStates[D3DRS_STENCILFAIL] = D3DSTENCILOP_KEEP;
+  renderStates[D3DRS_STENCILZFAIL] = D3DSTENCILOP_INCR;
+  renderStates[D3DRS_STENCILPASS] = D3DSTENCILOP_REPLACE;
+  renderStates[D3DRS_TWOSIDEDSTENCILMODE] = TRUE;
+  renderStates[D3DRS_CCW_STENCILFUNC] = D3DCMP_LESS;
+  renderStates[D3DRS_CCW_STENCILFAIL] = D3DSTENCILOP_ZERO;
+  renderStates[D3DRS_CCW_STENCILZFAIL] = D3DSTENCILOP_DECR;
+  renderStates[D3DRS_CCW_STENCILPASS] = D3DSTENCILOP_KEEP;
+
+  PipelineState state;
+  StateMapper::map_render_states(renderStates, state);
+
+  int errors = 0;
+  if (!state.stencilTestEnable) { printf("  FAIL: stencilTestEnable=false\n"); errors++; }
+  if (state.backStencilCompareOp != VK_COMPARE_OP_LESS) { printf("  FAIL: backStencilCompareOp != LESS\n"); errors++; }
+  if (state.backStencilFailOp != VK_STENCIL_OP_ZERO) { printf("  FAIL: backStencilFailOp != ZERO\n"); errors++; }
+  if (state.backStencilDepthFailOp != VK_STENCIL_OP_DECREMENT_AND_WRAP) { printf("  FAIL: backStencilDepthFailOp != DECR_WRAP\n"); errors++; }
+  if (state.backStencilPassOp != VK_STENCIL_OP_KEEP) { printf("  FAIL: backStencilPassOp != KEEP\n"); errors++; }
+
+  printf("  two-sided stencil %s\n", errors ? "FAIL" : "PASS");
+  return errors;
+}
+
+static int test_d3d9_format_mapping() {
+  printf("--- D3D9 format mapping ---\n");
+
+  int errors = 0;
+  struct { D3DFORMAT d3d; VkFormat vk; const char* name; } cases[] = {
+    {D3DFMT_A8R8G8B8,    VK_FORMAT_B8G8R8A8_UNORM,           "A8R8G8B8"},
+    {D3DFMT_X8R8G8B8,    VK_FORMAT_B8G8R8A8_UNORM,           "X8R8G8B8"},
+    {D3DFMT_A8B8G8R8,    VK_FORMAT_R8G8B8A8_UNORM,           "A8B8G8R8"},
+    {D3DFMT_X8B8G8R8,    VK_FORMAT_R8G8B8A8_UNORM,           "X8B8G8R8"},
+    {D3DFMT_R5G6B5,      VK_FORMAT_R5G6B5_UNORM_PACK16,      "R5G6B5"},
+    {D3DFMT_X1R5G5B5,    VK_FORMAT_A1R5G5B5_UNORM_PACK16,    "X1R5G5B5"},
+    {D3DFMT_A1R5G5B5,    VK_FORMAT_A1R5G5B5_UNORM_PACK16,    "A1R5G5B5"},
+    {D3DFMT_A4R4G4B4,    VK_FORMAT_A4B4G4R4_UNORM_PACK16,    "A4R4G4B4"},
+    {D3DFMT_A2R10G10B10, VK_FORMAT_A2B10G10R10_UNORM_PACK32, "A2R10G10B10"},
+    {D3DFMT_D16,         VK_FORMAT_D16_UNORM,                 "D16"},
+    {D3DFMT_D24S8,       VK_FORMAT_D24_UNORM_S8_UINT,         "D24S8"},
+    {D3DFMT_D32,         VK_FORMAT_D32_SFLOAT,                "D32"},
+    {D3DFMT_R32F,        VK_FORMAT_R32_SFLOAT,                "R32F"},
+    {D3DFMT_A16B16G16R16F, VK_FORMAT_R16G16B16A16_SFLOAT,    "A16B16G16R16F"},
+  };
+
+  for (auto& c : cases) {
+    VkFormat result = StateMapper::map_format(c.d3d);
+    if (result != c.vk) {
+      printf("  FAIL: %s -> %d, expected %d\n", c.name, (int)result, (int)c.vk);
+      errors++;
+    }
+  }
+
+  // Unknown format returns UNDEFINED
+  VkFormat unknown = StateMapper::map_format(static_cast<D3DFORMAT>(0xDEAD));
+  if (unknown != VK_FORMAT_UNDEFINED) {
+    printf("  FAIL: unknown format -> %d, expected UNDEFINED\n", (int)unknown);
+    errors++;
+  }
+
+  printf("  format mapping %s\n", errors ? "FAIL" : "PASS");
+  return errors;
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -858,6 +996,18 @@ int main() {
   totalFailed += test_state_mapper_cull();
   totalPassed++;
   totalFailed += test_state_mapper_render_states();
+  totalPassed++;
+
+  // ---- Additional state mapper tests ----
+  printf("\n=== Additional State Mapper Tests ===\n\n");
+
+  totalFailed += test_state_mapper_alpha_blend();
+  totalPassed++;
+  totalFailed += test_state_mapper_all_defaults();
+  totalPassed++;
+  totalFailed += test_state_mapper_two_sided_stencil();
+  totalPassed++;
+  totalFailed += test_d3d9_format_mapping();
   totalPassed++;
 
   // ---- Summary ----

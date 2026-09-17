@@ -141,6 +141,7 @@ static uint32_t src_count(SM3Opcode op) {
     case SM3_OP_IFC:
     case SM3_OP_BREAKC:
     case SM3_OP_LOOP:
+    case SM3_OP_SINCOS:
       return 1;
     case SM3_OP_ADD:
     case SM3_OP_SUB:
@@ -720,9 +721,9 @@ uint32_t SM3Translator::SpirvEmitter::iequal(uint32_t t, uint32_t a, uint32_t b)
 uint32_t SM3Translator::SpirvEmitter::slessthan(uint32_t t, uint32_t a, uint32_t b) {
   uint32_t id = alloc(); op(177, 5); emit(t); emit(id); emit(a); emit(b); return id;
 }
-
-uint32_t SM3Translator::SpirvEmitter::iadd(uint32_t t, uint32_t a, uint32_t b) {
-  uint32_t id = alloc(); op(129, 5); emit(t); emit(id); emit(a); emit(b); return id;
+uint32_t SM3Translator::SpirvEmitter::iadd(uint32_t t, uint32_t a, uint32_t b)
+{
+  uint32_t id = alloc(); op(128, 5); emit(t); emit(id); emit(a); emit(b); return id;
 }
 
 uint32_t SM3Translator::SpirvEmitter::sgreaterqual(uint32_t t, uint32_t a, uint32_t b) {
@@ -1519,18 +1520,12 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
 
     case SM3_OP_M4x4: {
       uint32_t src = emit_load_register(inst.src[0]);
-      uint32_t base = emit_load_register(inst.src[1]);
-      // M4x4: dest.xyzw = src * {base[0], base[1], base[2], base[3]}
-      // This is a matrix-vector multiply using consecutive constant registers
-      // In D3D9: the matrix is stored as 4 consecutive vec4 constants
-      // base = cN, we need cN, cN+1, cN+2, cN+3
-      // But we don't have the base register readily available as a matrix
-      // For now, do it component-wise: result[i] = dot(src, c[base+i])
       uint32_t baseRegIndex = inst.src[1].index;
+      // M4x4: result[i] = dot(src, c[base+i]) for i=0..3
       uint32_t results[4];
       for (uint32_t col = 0; col < 4; col++) {
         uint32_t cReg = get_or_create_const_float(baseRegIndex + col);
-        uint32_t dot = S.fdot(m_vec4, src, cReg);
+        uint32_t dot = S.fdot(m_floatType, src, cReg);
         results[col] = dot;
       }
       uint32_t r = S.compositeConstruct(m_vec4, {results[0], results[1], results[2], results[3]});
@@ -2371,7 +2366,7 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
     }
 
     case SM3_OP_REP: {
-      // REP: counted loop
+      // REP: counted loop (do-while style: body executes first, then check)
       // src[0] = address register (loop counter, i0)
       // src[1] = const int register (iteration count)
       uint32_t mergeLabel = S.alloc();
@@ -2386,9 +2381,9 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
       // Initialize counter to 0
       S.store(m_repCounterVar, S.constant(m_intType, 0));
 
-      // Load iteration count from const int
-      uint32_t countVal = emit_load_register(inst.src[1]);
-      m_repCountInt = S.compositeExtract(m_intType, countVal, 0);
+      // Load iteration count directly from const int register
+      uint32_t countReg = inst.src[1].index;
+      m_repCountInt = get_or_create_const_int(countReg);
 
       m_flowStack.push({mergeLabel, 0, false});
       m_loopStartLabel = headerLabel;
@@ -2396,15 +2391,11 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
       m_loopContinueTarget = continueTarget;
       m_continueLabelOpened = false;
 
-      // Branch to header
+      // Header block: loopMerge immediately followed by branch
       S.branch(headerLabel);
       S.label(headerLabel);
       S.loopMerge(mergeLabel, continueTarget);
-
-      // Check counter < count
-      uint32_t counterVal = S.load(m_intType, m_repCounterVar);
-      uint32_t cmpResult = S.slessthan(m_boolType, counterVal, m_repCountInt);
-      S.branchConditional(cmpResult, bodyLabel, mergeLabel);
+      S.branch(bodyLabel);
 
       S.label(bodyLabel);
       break;
@@ -2425,7 +2416,9 @@ void SM3Translator::emit_instruction(const SM3Instruction& inst) {
       uint32_t newCounter = S.iadd(m_intType, counterVal, one);
       S.store(m_repCounterVar, newCounter);
 
-      S.branch(m_loopStartLabel);
+      // Check counter < count, loop back or exit
+      uint32_t cmpResult = S.slessthan(m_boolType, newCounter, m_repCountInt);
+      S.branchConditional(cmpResult, m_loopStartLabel, frame.mergeLabel);
       S.label(frame.mergeLabel);
       break;
     }
