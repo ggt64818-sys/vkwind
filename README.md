@@ -135,3 +135,7 @@ Contributions are welcome. Please open an issue before submitting large changes.
 ## License
 
 MIT
+
+---
+
+**D3D10/11/12 coming soon..**
