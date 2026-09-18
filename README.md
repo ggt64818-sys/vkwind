@@ -128,6 +128,8 @@ cd build
 - NFS Underground 2 — 60 FPS
 - Other D3D9 era titles (2002–2008)
 
+**D3D10/11/12 coming soon..**
+
 ## Contributing
 
 Contributions are welcome. Please open an issue before submitting large changes.
@@ -135,7 +137,3 @@ Contributions are welcome. Please open an issue before submitting large changes.
 ## License
 
 MIT
-
----
-
-**D3D10/11/12 coming soon..**
