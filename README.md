@@ -17,14 +17,6 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 | Tests | 48/48 passing |
 | Winlator Integration | APK built and ready |
 
-### v0.5.1 Changes
-
-- **DrawIndexedPrimitiveUP**: Ring buffer instead of per-draw `vkCreateBuffer` (eliminates frame-time spikes)
-- **MVP dirty tracking**: Fixed broken static-local variable tracking (was always recomputing, wasted GPU cycles)
-- **DrawPrimitiveUP**: Added missing `ensure_render_pass_active()` call (prevents null pipeline on first draw)
-- **ColorFill**: Fixed returning `D3D_OK` on `LockRect` failure (now returns actual error)
-- **Shader translator**: Replaced heap-allocated `std::vector` with stack-allocated `std::array` in hot paths
-
 ### Not yet implemented
 
 - SM3 addressing modes (aL, a0, indexed constants)
