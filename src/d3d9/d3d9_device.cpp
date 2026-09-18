@@ -1071,19 +1071,15 @@ void D3D9Device::push_mvp_constants() {
   const D3DMATRIX& proj   = m_transforms[3];
 
   // Check if MVP needs recomputation (compare transform timestamps)
-  static uint32_t lastWorldTS = 0, lastViewTS = 0, lastProjTS = 0;
-  uint32_t curWorldTS = m_transformDirty ? ++lastWorldTS : lastWorldTS;
-  uint32_t curViewTS = m_transformDirty ? ++lastViewTS : lastViewTS;
-  uint32_t curProjTS = m_transformDirty ? ++lastProjTS : lastProjTS;
-  m_transformDirty = false;
-
-  if (curWorldTS == lastWorldTS && curViewTS == lastViewTS && curProjTS == lastProjTS) {
-    // Same transforms — skip MVP recomputation
-  } else {
-    lastWorldTS = curWorldTS;
-    lastViewTS = curViewTS;
-    lastProjTS = curProjTS;
+  if (m_transformDirty) {
+    m_lastWorldTS++;
+    m_lastViewTS++;
+    m_lastProjTS++;
   }
+  m_curWorldTS = m_lastWorldTS;
+  m_curViewTS = m_lastViewTS;
+  m_curProjTS = m_lastProjTS;
+  m_transformDirty = false;
 
   float mvp[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
   float temp[16];
@@ -1263,8 +1259,14 @@ int D3D9Device::Present(const void* pSourceRect, const void* pDestRect, void* hD
     } else if (draw.vertexBuffer) {
       m_cmdManager->bind_vertex_buffer(draw.vertexBuffer->handle(), 0, 0);
     }
-    push_mvp_constants();
-    m_cmdManager->draw(draw.vertexCount, draw.firstVertex);
+    if (draw.hasIndexBuffer) {
+      m_cmdManager->bind_index_buffer(draw.indexBufferDirect, draw.indexType);
+      push_mvp_constants();
+      m_cmdManager->draw_indexed(draw.indexCount, 0, 0);
+    } else {
+      push_mvp_constants();
+      m_cmdManager->draw(draw.vertexCount, draw.firstVertex);
+    }
   }
 
   end_active_render_pass();
@@ -1649,7 +1651,7 @@ int D3D9Device::ColorFill(IDirect3DSurface9* pSurface, const void* pRect, uint32
 
   D3DLOCKED_RECT locked = {};
   int res = pSurface->LockRect(&locked, pRect, 0);
-  if (FAILED(res)) return static_cast<int>(D3D_OK);
+  if (FAILED(res)) return res;
 
   uint32_t fillW = desc.Width;
   uint32_t fillH = desc.Height;
@@ -2130,6 +2132,8 @@ int D3D9Device::DrawPrimitiveUP(uint32_t PrimitiveType, uint32_t PrimitiveCount,
                                 const void* pVertexStreamZeroData, uint32_t VertexStreamZeroStride) {
   if (!m_cmdManager) return static_cast<int>(D3DERR_DEVICELOST);
 
+  ensure_render_pass_active();
+
   uint32_t vertsPerPrim = vertex_count_per_primitive(PrimitiveType);
   uint32_t vertexCount = PrimitiveCount * vertsPerPrim;
   uint32_t dataSize = vertexCount * VertexStreamZeroStride;
@@ -2172,37 +2176,53 @@ int D3D9Device::DrawIndexedPrimitiveUP(uint32_t PrimitiveType, uint32_t MinVerte
   ensure_render_pass_active();
 
   ::VkPipeline pipeline = create_or_get_pipeline();
-  if (pipeline) {
-    m_cmdManager->bind_pipeline(pipeline);
-  }
 
   uint32_t indexCount = index_count_for_prims(PrimitiveType, PrimitiveCount);
   uint32_t indexSize = (IndexDataFormat == D3DFMT_INDEX16) ? 2 : 4;
   uint32_t indexDataSize = indexCount * indexSize;
   uint32_t vertexDataSize = NumVertexIndices * VertexStreamZeroStride;
 
-  if (m_vkDevice) {
-    // Upload index data via command buffer manager's persistent staging
-    auto tempIB = std::make_unique<Buffer>(m_vkDevice.get(), indexDataSize,
-      VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    m_cmdManager->upload_buffer(tempIB->handle(), pIndexData, indexDataSize);
+  if (m_vkDevice && m_upVertexBuffer && m_upIndexBuffer) {
+    // Upload vertex data via ring buffer
+    VkDeviceSize vAligned = (vertexDataSize + kUpAlign - 1) & ~(kUpAlign - 1);
+    if (m_upVertexWriteOffset + vAligned > kUpBufferSize) {
+      m_upVertexWriteOffset = 0;
+    }
+    VkDeviceSize vWriteOffset = m_upVertexWriteOffset;
+    m_upVertexWriteOffset += vAligned;
 
-    VkIndexType idxType = (IndexDataFormat == D3DFMT_INDEX16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-    m_cmdManager->bind_index_buffer(tempIB->handle(), idxType);
-    m_frameTempBuffers.push_back(std::move(tempIB));
+    void* vMapped = m_upVertexBuffer->map();
+    if (vMapped) {
+      memcpy(static_cast<char*>(vMapped) + vWriteOffset, pVertexStreamZeroData, vertexDataSize);
+      m_upVertexBuffer->unmap();
 
-    // Upload vertex data via command buffer manager's persistent staging
-    auto tempVB = std::make_unique<Buffer>(m_vkDevice.get(), vertexDataSize,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    m_cmdManager->upload_buffer(tempVB->handle(), pVertexStreamZeroData, vertexDataSize);
+      // Upload index data via ring buffer
+      VkDeviceSize iAligned = (indexDataSize + kUpAlign - 1) & ~(kUpAlign - 1);
+      if (m_upIndexWriteOffset + iAligned > kUpBufferSize) {
+        m_upIndexWriteOffset = 0;
+      }
+      VkDeviceSize iWriteOffset = m_upIndexWriteOffset;
+      m_upIndexWriteOffset += iAligned;
 
-    m_cmdManager->bind_vertex_buffer(tempVB->handle(), 0, 0);
-    m_frameTempBuffers.push_back(std::move(tempVB));
+      void* iMapped = m_upIndexBuffer->map();
+      if (iMapped) {
+        memcpy(static_cast<char*>(iMapped) + iWriteOffset, pIndexData, indexDataSize);
+        m_upIndexBuffer->unmap();
 
-    push_mvp_constants();
-    m_cmdManager->draw_indexed(indexCount, 0, 0);
+        PendingDrawUP draw;
+        draw.pipeline = pipeline;
+        draw.vertexBufferDirect = m_upVertexBuffer->handle();
+        draw.vertexBufferOffset = vWriteOffset;
+        draw.vertexCount = NumVertexIndices;
+        draw.firstVertex = 0;
+        draw.indexBufferDirect = m_upIndexBuffer->handle();
+        draw.indexBufferOffset = iWriteOffset;
+        draw.indexCount = indexCount;
+        draw.indexType = (IndexDataFormat == D3DFMT_INDEX16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        draw.hasIndexBuffer = true;
+        m_pendingDraws.push_back(std::move(draw));
+      }
+    }
   }
 
   VKWIND_DBG(kTag, "DrawIndexedPrimitiveUP type=%u, primCount=%u", PrimitiveType, PrimitiveCount);

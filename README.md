@@ -4,18 +4,26 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 
 ## Status
 
-**v0.5.0-async** — SM3 shader translator 100% complete. All 83/83 opcodes implemented.
+**v0.5.1** — Performance fixes and correctness improvements.
 
 | Component | Status |
 |---|---|
 | D3D9 Device | 60+ methods implemented |
 | Vulkan Backend | Instance, device, swapchain, pipeline, command buffers |
 | SM3 Shader Translator | **83/83 opcodes (100%)** |
-| Draw Calls | DrawPrimitive, DrawIndexedPrimitive, DrawPrimitiveUP |
+| Draw Calls | DrawPrimitive, DrawIndexedPrimitive, DrawPrimitiveUP, DrawIndexedPrimitiveUP |
 | State Mapping | Depth, Stencil, Blend — full mapping |
 | Pipeline Cache | Ring buffer staging, thread-safe |
 | Tests | 48/48 passing |
 | Winlator Integration | APK built and ready |
+
+### v0.5.1 Changes
+
+- **DrawIndexedPrimitiveUP**: Ring buffer instead of per-draw `vkCreateBuffer` (eliminates frame-time spikes)
+- **MVP dirty tracking**: Fixed broken static-local variable tracking (was always recomputing, wasted GPU cycles)
+- **DrawPrimitiveUP**: Added missing `ensure_render_pass_active()` call (prevents null pipeline on first draw)
+- **ColorFill**: Fixed returning `D3D_OK` on `LockRect` failure (now returns actual error)
+- **Shader translator**: Replaced heap-allocated `std::vector` with stack-allocated `std::array` in hot paths
 
 ### Not yet implemented
 

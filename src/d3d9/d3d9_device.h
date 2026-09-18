@@ -363,6 +363,12 @@ private:
     VkDeviceSize vertexBufferOffset = 0;
     uint32_t vertexCount = 0;
     uint32_t firstVertex = 0;
+    // Index buffer (for DrawIndexedPrimitiveUP)
+    VkBuffer indexBufferDirect = VK_NULL_HANDLE;
+    VkDeviceSize indexBufferOffset = 0;
+    uint32_t indexCount = 0;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+    bool hasIndexBuffer = false;
   };
   // Staging: DrawPrimitiveUP stores here before Present's begin_frame clears old data.
   std::vector<PendingDrawUP> m_pendingDraws;
@@ -404,6 +410,12 @@ private:
   // Transform dirty tracking (avoid redundant MVP recomputation)
   bool m_transformDirty = true;
   float m_lastMVP[16] = {};
+  uint32_t m_lastWorldTS = 0;
+  uint32_t m_lastViewTS = 0;
+  uint32_t m_lastProjTS = 0;
+  uint32_t m_curWorldTS = 0;
+  uint32_t m_curViewTS = 0;
+  uint32_t m_curProjTS = 0;
   float m_lastAlphaPC[8] = {};
 
   // Texture stage states (D3DTSS_COLOROP, D3DTSS_ALPHAOP, etc.)

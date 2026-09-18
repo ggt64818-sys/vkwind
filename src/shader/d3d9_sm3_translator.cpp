@@ -646,6 +646,18 @@ uint32_t SM3Translator::SpirvEmitter::vectorShuffle(uint32_t type, uint32_t v1, 
   for (auto c : comps) emit(c); return id;
 }
 
+template<size_t N>
+uint32_t SM3Translator::SpirvEmitter::compositeConstruct(uint32_t type, const std::array<uint32_t, N>& comps) {
+  uint32_t id = alloc(); op(80, 3 + N); emit(type); emit(id);
+  for (auto c : comps) emit(c); return id;
+}
+
+template<size_t N>
+uint32_t SM3Translator::SpirvEmitter::vectorShuffle(uint32_t type, uint32_t v1, uint32_t v2, const std::array<uint32_t, N>& comps) {
+  uint32_t id = alloc(); op(79, 5 + N); emit(type); emit(id); emit(v1); emit(v2);
+  for (auto c : comps) emit(c); return id;
+}
+
 uint32_t SM3Translator::SpirvEmitter::compositeExtract(uint32_t type, uint32_t composite, uint32_t index) {
   uint32_t id = alloc(); op(81, 5); emit(type); emit(id); emit(composite); emit(index); return id;
 }
@@ -1224,13 +1236,13 @@ void SM3Translator::emit_store_register(const SM3Register& reg, uint32_t value) 
       uint32_t var = get_or_create_temp(reg.index);
       if (reg.writeMask != 0xF) {
         uint32_t old = m_spirv->load(m_vec4, var);
-        std::vector<uint32_t> components;
+        std::array<uint32_t, 4> components;
         uint32_t srcIdx = 0;
         for (uint32_t i = 0; i < 4; i++) {
           if (reg.writeMask & (1 << i)) {
-            components.push_back(m_spirv->compositeExtract(m_floatType, value, srcIdx++));
+            components[i] = m_spirv->compositeExtract(m_floatType, value, srcIdx++);
           } else {
-            components.push_back(m_spirv->compositeExtract(m_floatType, old, i));
+            components[i] = m_spirv->compositeExtract(m_floatType, old, i);
           }
         }
         value = m_spirv->compositeConstruct(m_vec4, components);
@@ -1245,13 +1257,13 @@ void SM3Translator::emit_store_register(const SM3Register& reg, uint32_t value) 
       uint32_t var = get_or_create_output(reg.index);
       if (reg.writeMask != 0xF) {
         uint32_t old = m_spirv->load(m_vec4, var);
-        std::vector<uint32_t> components;
+        std::array<uint32_t, 4> components;
         uint32_t srcIdx = 0;
         for (uint32_t i = 0; i < 4; i++) {
           if (reg.writeMask & (1 << i)) {
-            components.push_back(m_spirv->compositeExtract(m_floatType, value, srcIdx++));
+            components[i] = m_spirv->compositeExtract(m_floatType, value, srcIdx++);
           } else {
-            components.push_back(m_spirv->compositeExtract(m_floatType, old, i));
+            components[i] = m_spirv->compositeExtract(m_floatType, old, i);
           }
         }
         value = m_spirv->compositeConstruct(m_vec4, components);

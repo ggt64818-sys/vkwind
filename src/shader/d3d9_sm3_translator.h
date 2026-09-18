@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -368,8 +369,12 @@ private:
     uint32_t imageSampleImplicitLod(uint32_t resultType, uint32_t sampledImage, uint32_t coord);
     uint32_t imageSampleExplicitLod(uint32_t resultType, uint32_t sampledImage, uint32_t coord, uint32_t lod);
     uint32_t compositeConstruct(uint32_t type, const std::vector<uint32_t>& components);
+    template<size_t N>
+    uint32_t compositeConstruct(uint32_t type, const std::array<uint32_t, N>& components);
     uint32_t constantComposite(uint32_t type, const std::vector<uint32_t>& consts);
     uint32_t vectorShuffle(uint32_t type, uint32_t vec1, uint32_t vec2, const std::vector<uint32_t>& components);
+    template<size_t N>
+    uint32_t vectorShuffle(uint32_t type, uint32_t vec1, uint32_t vec2, const std::array<uint32_t, N>& components);
     uint32_t compositeExtract(uint32_t type, uint32_t composite, uint32_t index);
     uint32_t fadd(uint32_t type, uint32_t a, uint32_t b);
     uint32_t fsub(uint32_t type, uint32_t a, uint32_t b);
