@@ -8,6 +8,7 @@
 #include "d3d9_cube_texture.h"
 #include "../shader/shader_translator.h"
 #include "../shader/d3d9_sm3_translator.h"
+#include "../shader/d3d9_fixed_function.h"
 #include "../shader/default_shaders.inc"
 #include "../util/util_log.h"
 #include <cstring>
@@ -240,6 +241,7 @@ D3D9Device::~D3D9Device() {
   if (m_compiledPS.module) vkDestroyShaderModule(m_vkDevice->raw(), m_compiledPS.module, nullptr);
   if (m_fallbackVS) vkDestroyShaderModule(m_vkDevice->raw(), m_fallbackVS, nullptr);
   if (m_fallbackFS) vkDestroyShaderModule(m_vkDevice->raw(), m_fallbackFS, nullptr);
+  if (m_ffFS) vkDestroyShaderModule(m_vkDevice->raw(), m_ffFS, nullptr);
 
   for (auto& tex : m_textures) tex = nullptr;
   m_pixelShader = nullptr;
@@ -645,7 +647,9 @@ void D3D9Device::ensure_render_pass_active() {
     m_vkSwapchain->width(),
     m_vkSwapchain->height(),
     clearColor,
-    m_vkSwapchain->depth_format());
+    m_vkSwapchain->depth_format(),
+    m_clearDepth,
+    m_clearStencil);
 
   // Auto-viewport: if app never called SetViewport, use full render target
   uint32_t vpW = m_viewport.Width ? static_cast<uint32_t>(m_viewport.Width) : m_vkSwapchain->width();
@@ -773,6 +777,64 @@ void D3D9Device::end_active_render_pass() {
 
   bool useFallback = (!m_compiledVS.module || !m_compiledPS.module);
 
+  // If no pixel shader is set, generate a fixed-function texture combiner shader
+  if (!m_pixelShader && m_shadersDirty) {
+    // Destroy previous FF shader
+    if (m_ffFS) {
+      vkDestroyShaderModule(dev, m_ffFS, nullptr);
+      m_ffFS = VK_NULL_HANDLE;
+    }
+    m_shadersDirty = false;
+  }
+
+  if (!m_pixelShader && !m_ffFS) {
+    // Build texture stage config from current state
+    TextureStageConfig ffConfig;
+    uint32_t activeTex = 0;
+    for (uint32_t s = 0; s < 8; s++) {
+      if (m_textures[s]) activeTex = s + 1;
+    }
+    ffConfig.activeTextureCount = activeTex;
+
+    // Check if any stage has explicit COLOROP set (not 0/DISABLE)
+    bool hasExplicitOps = false;
+    for (uint32_t s = 0; s < activeTex; s++) {
+      if (m_textureStageStates[s][1] > 1) { // COLOROP > DISABLE
+        hasExplicitOps = true;
+        break;
+      }
+    }
+
+    ffConfig.textureFactor = m_renderStates[D3DRS_TEXTUREFACTOR];
+
+    for (uint32_t s = 0; s < 8; s++) {
+      ffConfig.colorOp[s]    = m_textureStageStates[s][1];  // D3DTSS_COLOROP
+      ffConfig.colorArg1[s]  = m_textureStageStates[s][2];  // D3DTSS_COLORARG1
+      ffConfig.colorArg2[s]  = m_textureStageStates[s][3];  // D3DTSS_COLORARG2
+      ffConfig.alphaOp[s]    = m_textureStageStates[s][4];  // D3DTSS_ALPHAOP
+      ffConfig.alphaArg1[s]  = m_textureStageStates[s][5];  // D3DTSS_ALPHAARG1
+      ffConfig.alphaArg2[s]  = m_textureStageStates[s][6];  // D3DTSS_ALPHAARG2
+      ffConfig.resultArg[s]  = m_textureStageStates[s][12]; // D3DTSS_RESULTARG (12)
+      ffConfig.texCoordIndex[s] = m_textureStageStates[s][11]; // D3DTSS_TEXCOORDINDEX
+    }
+
+    // Generate the fixed-function shader
+    auto ffSpirv = generate_fixed_function_pixel_shader(ffConfig);
+    if (!ffSpirv.empty()) {
+      VkShaderModuleCreateInfo moduleInfo = {};
+      moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+      moduleInfo.codeSize = ffSpirv.size() * 4;
+      moduleInfo.pCode = ffSpirv.data();
+      VkResult result = vkCreateShaderModule(dev, &moduleInfo, nullptr, &m_ffFS);
+      if (result == VK_SUCCESS) {
+        VKWIND_INFO(kTag, "Fixed-function FS generated: %u words, %u active textures",
+          (uint32_t)ffSpirv.size(), activeTex);
+      } else {
+        VKWIND_ERR(kTag, "Failed to create FF FS module: %d", result);
+      }
+    }
+  }
+
   if (useFallback) {
     if (!m_fallbackVS) {
       VkShaderModuleCreateInfo moduleInfo = {};
@@ -802,7 +864,7 @@ void D3D9Device::end_active_render_pass() {
   }
 
   VkShaderModule vsModule = useFallback ? m_fallbackVS : m_compiledVS.module;
-  VkShaderModule fsModule = useFallback ? m_fallbackFS : m_compiledPS.module;
+  VkShaderModule fsModule = m_ffFS ? m_ffFS : (useFallback ? m_fallbackFS : m_compiledPS.module);
 
   if (!vsModule || !fsModule) {
     VKWIND_ERR(kTag, "No shader modules available");
@@ -816,10 +878,22 @@ void D3D9Device::end_active_render_pass() {
 
   // Vertex input: prefer vertex declaration, then FVF, then fallback
   if (m_vertexDecl && !m_vertexDecl->elements().empty()) {
-    // Build vertex input from D3D9 vertex declaration
-    uint32_t stride = m_vertexDecl->calculate_stride();
-    m_pipelineState.vertexBindings = {{0, stride, VK_VERTEX_INPUT_RATE_VERTEX}};
+    // Build vertex input from D3D9 vertex declaration with proper multi-stream support
+    m_pipelineState.vertexBindings.clear();
     m_pipelineState.vertexAttributes.clear();
+
+    // Collect unique streams and compute their strides
+    uint32_t streamMask = 0;
+    for (const auto& e : m_vertexDecl->elements()) {
+      streamMask |= (1u << e.Stream);
+    }
+
+    for (uint32_t s = 0; s < 16; s++) {
+      if (!(streamMask & (1u << s))) continue;
+      uint32_t stride = m_streamSources[s].stride;
+      if (stride == 0) stride = m_vertexDecl->calculate_stride();
+      m_pipelineState.vertexBindings.push_back({s, stride, VK_VERTEX_INPUT_RATE_VERTEX});
+    }
 
     uint32_t loc = 0;
     for (const auto& e : m_vertexDecl->elements()) {
@@ -831,7 +905,7 @@ void D3D9Device::end_active_render_pass() {
           case D3DDECLTYPE_FLOAT4: fmt = VK_FORMAT_R32G32B32A32_SFLOAT; break;
           default: fmt = VK_FORMAT_R32G32B32_SFLOAT; break;
         }
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       } else if (e.Usage == D3DDECLUSAGE_NORMAL) {
         VkFormat fmt;
         switch (e.Type) {
@@ -839,10 +913,10 @@ void D3D9Device::end_active_render_pass() {
           case D3DDECLTYPE_FLOAT4: fmt = VK_FORMAT_R32G32B32A32_SFLOAT; break;
           default: fmt = VK_FORMAT_R32G32B32_SFLOAT; break;
         }
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       } else if (e.Usage == D3DDECLUSAGE_COLOR) {
         VkFormat fmt = (e.Type == D3DDECLTYPE_D3DCOLOR) ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R32G32B32A32_SFLOAT;
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       } else if (e.Usage == D3DDECLUSAGE_TEXCOORD) {
         VkFormat fmt;
         switch (e.Type) {
@@ -856,7 +930,7 @@ void D3D9Device::end_active_render_pass() {
           case D3DDECLTYPE_FLOAT16_4: fmt = VK_FORMAT_R16G16B16A16_SFLOAT; break;
           default: fmt = VK_FORMAT_R32G32_SFLOAT; break;
         }
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       } else if (e.Usage == D3DDECLUSAGE_BLENDWEIGHT) {
         VkFormat fmt;
         switch (e.Type) {
@@ -867,10 +941,10 @@ void D3D9Device::end_active_render_pass() {
           case D3DDECLTYPE_UBYTE4N: fmt = VK_FORMAT_R8G8B8A8_UNORM; break;
           default: fmt = VK_FORMAT_R32_SFLOAT; break;
         }
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       } else if (e.Usage == D3DDECLUSAGE_BLENDINDICES) {
         VkFormat fmt = (e.Type == D3DDECLTYPE_UBYTE4) ? VK_FORMAT_R8G8B8A8_UINT : VK_FORMAT_R8G8B8A8_UINT;
-        m_pipelineState.vertexAttributes.push_back({loc, 0, fmt, e.Offset});
+        m_pipelineState.vertexAttributes.push_back({loc, e.Stream, fmt, e.Offset});
       }
       loc++;
     }
@@ -949,7 +1023,7 @@ void D3D9Device::end_active_render_pass() {
     }
 
     // Return fallback — game renders without hitch
-    m_currentPipeline = useFallback ? VK_NULL_HANDLE : VK_NULL_HANDLE;
+    m_currentPipeline = VK_NULL_HANDLE;
     m_pipelineDirty = false;
 
     // Ensure fallback shaders are available
@@ -1910,6 +1984,8 @@ int D3D9Device::SetTexture(uint32_t Stage, IDirect3DBaseTexture9* pTexture) {
   if (Stage >= 8) return static_cast<int>(D3DERR_INVALIDCALL);
   m_textures[Stage] = pTexture;
   m_texturesDirty = true;
+  m_shadersDirty = true;
+  m_pipelineDirty = true;
   return static_cast<int>(D3D_OK);
 }
 
@@ -1924,6 +2000,7 @@ int D3D9Device::SetTextureStageState(uint32_t Stage, uint32_t Type, uint32_t Val
   VKWIND_DBG(kTag, "SetTextureStageState s%d, type=%u, value=%u", Stage, Type, Value);
   m_textureStageStates[Stage][Type] = Value;
   m_shadersDirty = true;
+  m_pipelineDirty = true;
   return static_cast<int>(D3D_OK);
 }
 
@@ -2085,6 +2162,18 @@ int D3D9Device::DrawPrimitive(uint32_t PrimitiveType, uint32_t StartVertex, uint
     }
   }
 
+  // Bind additional vertex streams (1-15)
+  for (uint32_t s = 1; s < 16; s++) {
+    auto& ss = m_streamSources[s];
+    if (ss.buffer) {
+      auto* vb = static_cast<D3D9VertexBuffer*>(ss.buffer);
+      vb->ensure_gpu_buffer(*m_cmdManager);
+      if (vb->gpu_buffer()) {
+        m_cmdManager->bind_vertex_buffer(vb->gpu_buffer(), s, ss.offset);
+      }
+    }
+  }
+
   push_mvp_constants();
   m_cmdManager->draw(PrimitiveCount * vertex_count_per_primitive(PrimitiveType), StartVertex);
 
@@ -2109,6 +2198,18 @@ int D3D9Device::DrawIndexedPrimitive(uint32_t PrimitiveType, int BaseVertexIndex
     vb->ensure_gpu_buffer(*m_cmdManager);
     if (vb->gpu_buffer()) {
       m_cmdManager->bind_vertex_buffer(vb->gpu_buffer(), 0, ss0.offset);
+    }
+  }
+
+  // Bind additional vertex streams (1-15)
+  for (uint32_t s = 1; s < 16; s++) {
+    auto& ss = m_streamSources[s];
+    if (ss.buffer) {
+      auto* vb = static_cast<D3D9VertexBuffer*>(ss.buffer);
+      vb->ensure_gpu_buffer(*m_cmdManager);
+      if (vb->gpu_buffer()) {
+        m_cmdManager->bind_vertex_buffer(vb->gpu_buffer(), s, ss.offset);
+      }
     }
   }
 

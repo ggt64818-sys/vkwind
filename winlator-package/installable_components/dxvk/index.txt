@@ -6,4 +6,4 @@ dxvk-2.3.1.tzst
 dxvk-2.5.2.tzst
 dxvk-2.6.1.tzst
 dxvk-vkwind-0.5.0-async.tzst
-dxvk-vkwind-0.5.1.tzst
+dxvk-vkwind-0.5.1.tzstdxvk-vkwind-0.5.2.tzst

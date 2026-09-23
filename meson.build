@@ -1,5 +1,5 @@
 project('vkwind', 'cpp',
-  version : '0.5.1',
+  version : '0.5.2',
   license : 'MIT',
   default_options : [
     'cpp_std=c++20',
@@ -72,6 +72,7 @@ vkwind_sources = files(
   # Shader translation
   'src/shader/shader_translator.cpp',
   'src/shader/d3d9_sm3_translator.cpp',
+  'src/shader/d3d9_fixed_function.cpp',
   # Utilities
   'src/util/util_log.cpp',
   'src/util/util_config.cpp',

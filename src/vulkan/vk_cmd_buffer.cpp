@@ -196,7 +196,8 @@ void CommandBufferManager::wait_frame(uint32_t frameIndex) {
 void CommandBufferManager::begin_render_pass(VkRenderPass renderPass, VkFramebuffer framebuffer,
                                               uint32_t width, uint32_t height,
                                               const float* clearColor,
-                                              VkFormat depthFormat) {
+                                              VkFormat depthFormat,
+                                              float clearDepth, uint32_t clearStencil) {
   VkRenderPassBeginInfo rpInfo = {};
   rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   rpInfo.renderPass = renderPass;
@@ -218,8 +219,8 @@ void CommandBufferManager::begin_render_pass(VkRenderPass renderPass, VkFramebuf
 
   if (depthFormat != VK_FORMAT_UNDEFINED) {
     VkClearValue depthClear = {};
-    depthClear.depthStencil.depth = 1.0f;
-    depthClear.depthStencil.stencil = 0;
+    depthClear.depthStencil.depth = clearDepth;
+    depthClear.depthStencil.stencil = clearStencil;
     clearValues.push_back(depthClear);
   }
 

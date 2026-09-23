@@ -80,7 +80,8 @@ public:
   void begin_render_pass(VkRenderPass renderPass, VkFramebuffer framebuffer,
                          uint32_t width, uint32_t height,
                          const float* clearColor = nullptr,
-                         VkFormat depthFormat = VK_FORMAT_UNDEFINED);
+                         VkFormat depthFormat = VK_FORMAT_UNDEFINED,
+                         float clearDepth = 1.0f, uint32_t clearStencil = 0);
   void end_render_pass();
 
   void bind_pipeline(::VkPipeline pipeline, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);

@@ -17,13 +17,11 @@ D3D9::~D3D9() {
 }
 
 uint32_t D3D9::AddRef() {
-  static uint32_t s_refCount = 1;
-  return ++s_refCount;
+  return ++m_refCount;
 }
 
 uint32_t D3D9::Release() {
-  static uint32_t s_refCount = 1;
-  uint32_t count = --s_refCount;
+  uint32_t count = --m_refCount;
   if (count == 0) delete this;
   return count;
 }

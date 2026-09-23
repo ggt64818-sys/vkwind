@@ -33,6 +33,9 @@ public:
   int GetDeviceCaps(uint32_t Adapter, D3DDEVTYPE DeviceType, D3DCAPS9* pCaps) override;
   int GetAdapterMonitor(uint32_t Adapter) override;
   int CreateDevice(uint32_t Adapter, D3DDEVTYPE DeviceType, void* hFocusWindow, uint32_t BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface) override;
+
+private:
+  uint32_t m_refCount = 1;
 };
 
 } // namespace vkwind

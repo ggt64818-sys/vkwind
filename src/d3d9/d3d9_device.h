@@ -432,6 +432,8 @@ private:
 
   ::VkShaderModule m_fallbackVS = VK_NULL_HANDLE;
   ::VkShaderModule m_fallbackFS = VK_NULL_HANDLE;
+  ::VkShaderModule m_ffFS = VK_NULL_HANDLE; // Fixed-function texture combiner shader
+  uint64_t m_ffShaderHash = 0; // Hash of texture stage states used to generate m_ffFS
 
   // UBO for MVP matrix
   ::VkBuffer m_uboBuffer = VK_NULL_HANDLE;
