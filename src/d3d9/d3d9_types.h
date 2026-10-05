@@ -807,17 +807,15 @@ struct D3DADAPTER_IDENTIFIER9 {
 #ifndef __IUnknown_INTERFACE_DEFINED__
 #define __IUnknown_INTERFACE_DEFINED__
 struct IUnknown {
-  virtual ~IUnknown() = default;
-  virtual uint32_t AddRef() = 0;
-  virtual uint32_t Release() = 0;
-  virtual int QueryInterface(const void* iid, void** obj) = 0;
+    virtual int QueryInterface(const void* iid, void** obj) = 0;
+    virtual uint32_t AddRef() = 0;
+    virtual uint32_t Release() = 0;
 };
 #endif
 
 // IDirect3DResource9 (base for all GPU resources)
 struct IDirect3DResource9 : IUnknown {
-  virtual ~IDirect3DResource9() = default;
-  virtual void GetDevice(IDirect3DDevice9** ppDevice) = 0;
+    virtual void GetDevice(IDirect3DDevice9** ppDevice) = 0;
   virtual void SetPrivateData(uint32_t refguid, const void* pData, uint32_t SizeOfData, uint32_t Flags) = 0;
   virtual void GetPrivateData(uint32_t refguid, void* pData, uint32_t* pSizeOfData) = 0;
   virtual void FreePrivateData(uint32_t refguid) = 0;
@@ -829,16 +827,14 @@ struct IDirect3DResource9 : IUnknown {
 
 // IDirect3DBaseTexture9
 struct IDirect3DBaseTexture9 : IDirect3DResource9 {
-  virtual ~IDirect3DBaseTexture9() = default;
-  virtual uint32_t SetLOD(uint32_t LODNew) = 0;
+    virtual uint32_t SetLOD(uint32_t LODNew) = 0;
   virtual uint32_t GetLOD() = 0;
   virtual uint32_t GetLevelCount() = 0;
 };
 
 // IDirect3DTexture9
 struct IDirect3DTexture9 : IDirect3DBaseTexture9 {
-  virtual ~IDirect3DTexture9() = default;
-  virtual uint32_t GetLevelDesc(uint32_t Level, void* pDesc) = 0;
+    virtual uint32_t GetLevelDesc(uint32_t Level, void* pDesc) = 0;
   virtual uint32_t GetSurfaceLevel(uint32_t Level, IDirect3DSurface9** ppSurfaceLevel) = 0;
   virtual uint32_t LockRect(uint32_t Level, void* pLockedRect, const void* pRect, uint32_t Flags) = 0;
   virtual uint32_t UnlockRect(uint32_t Level) = 0;
@@ -847,18 +843,15 @@ struct IDirect3DTexture9 : IDirect3DBaseTexture9 {
 
 // IDirect3DVolumeTexture9
 struct IDirect3DVolumeTexture9 : IDirect3DBaseTexture9 {
-  virtual ~IDirect3DVolumeTexture9() = default;
-};
+  };
 
 // IDirect3DCubeTexture9
 struct IDirect3DCubeTexture9 : IDirect3DBaseTexture9 {
-  virtual ~IDirect3DCubeTexture9() = default;
-};
+  };
 
 // IDirect3DSurface9
 struct IDirect3DSurface9 : IDirect3DResource9 {
-  virtual ~IDirect3DSurface9() = default;
-  virtual int GetContainer(const void* riid, void** ppContainer) = 0;
+    virtual int GetContainer(const void* riid, void** ppContainer) = 0;
   virtual int GetDesc(void* pDesc) = 0;
   virtual int LockRect(void* pLockedRect, const void* pRect, uint32_t Flags) = 0;
   virtual int UnlockRect() = 0;
@@ -866,41 +859,35 @@ struct IDirect3DSurface9 : IDirect3DResource9 {
 
 // IDirect3DVolume9
 struct IDirect3DVolume9 : IDirect3DResource9 {
-  virtual ~IDirect3DVolume9() = default;
-};
+  };
 
 // IDirect3DVertexBuffer9
 struct IDirect3DVertexBuffer9 : IDirect3DResource9 {
-  virtual ~IDirect3DVertexBuffer9() = default;
-  virtual int Lock(uint32_t OffsetToLock, uint32_t SizeToLock, void** ppbData, uint32_t Flags) = 0;
+    virtual int Lock(uint32_t OffsetToLock, uint32_t SizeToLock, void** ppbData, uint32_t Flags) = 0;
   virtual int Unlock() = 0;
   virtual int GetDesc(void* pDesc) = 0;
 };
 
 // IDirect3DIndexBuffer9
 struct IDirect3DIndexBuffer9 : IDirect3DResource9 {
-  virtual ~IDirect3DIndexBuffer9() = default;
-  virtual int Lock(uint32_t OffsetToLock, uint32_t SizeToLock, void** ppbData, uint32_t Flags) = 0;
+    virtual int Lock(uint32_t OffsetToLock, uint32_t SizeToLock, void** ppbData, uint32_t Flags) = 0;
   virtual int Unlock() = 0;
   virtual int GetDesc(void* pDesc) = 0;
 };
 
 // IDirect3DPixelShader9
 struct IDirect3DPixelShader9 : IDirect3DResource9 {
-  virtual ~IDirect3DPixelShader9() = default;
-  virtual int GetFunction(void* pFunction, uint32_t* pSizeOfData) = 0;
+    virtual int GetFunction(void* pFunction, uint32_t* pSizeOfData) = 0;
 };
 
 // IDirect3DVertexShader9
 struct IDirect3DVertexShader9 : IDirect3DResource9 {
-  virtual ~IDirect3DVertexShader9() = default;
-  virtual int GetFunction(void* pFunction, uint32_t* pSizeOfData) = 0;
+    virtual int GetFunction(void* pFunction, uint32_t* pSizeOfData) = 0;
 };
 
 // IDirect3DSwapChain9
 struct IDirect3DSwapChain9 : IUnknown {
-  virtual ~IDirect3DSwapChain9() = default;
-  virtual int Present(const void* pSourceRect, const void* pDestRect, void* hDestWindowOverride, void* pDirtyRegion, uint32_t Flags) = 0;
+    virtual int Present(const void* pSourceRect, const void* pDestRect, void* hDestWindowOverride, void* pDirtyRegion, uint32_t Flags) = 0;
   virtual int GetFrontBuffer(IDirect3DSurface9* pDestSurface) = 0;
   virtual int GetBackBuffer(uint32_t BackBuffer, D3DBACKBUFFER_TYPE Type, IDirect3DSurface9** ppBackBuffer) = 0;
   virtual int GetRasterStatus(void* pRasterStatus) = 0;
@@ -911,8 +898,7 @@ struct IDirect3DSwapChain9 : IUnknown {
 
 // IDirect3DQuery9
 struct IDirect3DQuery9 : IUnknown {
-  virtual ~IDirect3DQuery9() = default;
-  virtual void GetDevice(IDirect3DDevice9** ppDevice) = 0;
+    virtual void GetDevice(IDirect3DDevice9** ppDevice) = 0;
   virtual void SetPrivateData(uint32_t refguid, const void* pData, uint32_t SizeOfData, uint32_t Flags) = 0;
   virtual void GetPrivateData(uint32_t refguid, void* pData, uint32_t* pSizeOfData) = 0;
   virtual void FreePrivateData(uint32_t refguid) = 0;
@@ -924,13 +910,11 @@ struct IDirect3DQuery9 : IUnknown {
 
 // IDirect3DStateBlock9
 struct IDirect3DStateBlock9 : IUnknown {
-  virtual ~IDirect3DStateBlock9() = default;
-};
+  };
 
 // IDirect3D9
 struct IDirect3D9 : IUnknown {
-  virtual ~IDirect3D9() = default;
-  virtual int RegisterSoftwareDevice(void* pInitializeFunction) = 0;
+    virtual int RegisterSoftwareDevice(void* pInitializeFunction) = 0;
   virtual uint32_t GetAdapterCount() = 0;
   virtual int GetAdapterIdentifier(uint32_t Adapter, uint32_t Flags, void* pIdentifier) = 0;
   virtual uint32_t GetAdapterModeCount(uint32_t Adapter, D3DFORMAT Format) = 0;
@@ -948,13 +932,11 @@ struct IDirect3D9 : IUnknown {
 
 // IDirect3D9Ex
 struct IDirect3D9Ex : IDirect3D9 {
-  virtual ~IDirect3D9Ex() = default;
-};
+  };
 
 // IDirect3DDevice9
 struct IDirect3DDevice9 : IUnknown {
-  virtual ~IDirect3DDevice9() = default;
-
+  
   // Device management
   virtual int TestCooperativeLevel() = 0;
   virtual int GetAvailablePoolMem(uint32_t Usage) = 0;
@@ -1072,6 +1054,5 @@ struct IDirect3DDevice9 : IUnknown {
 
 // IDirect3DDevice9Ex
 struct IDirect3DDevice9Ex : IDirect3DDevice9 {
-  virtual ~IDirect3DDevice9Ex() = default;
-};
+  };
 

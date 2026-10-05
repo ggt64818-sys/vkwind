@@ -6,7 +6,7 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 
 ## Status
 
-**v0.5.2** — Texture combiners and critical bugfixes.
+**v0.5.3** — Frame lifecycle fix, COM ABI fix, GetBackBuffer, FVF locations.
 
 | Component | Status |
 |---|---|
@@ -28,7 +28,14 @@ A Vulkan-based translation layer for Direct3D 9 which allows running Windows 3D 
 - MSAA, cube maps, 3D textures
 - Palette textures (256-color)
 
-## What's new in v0.5.2
+## What's new in v0.5.3
+
+- **Frame lifecycle fix** — `begin_frame()` moved to end of Present; DrawPrimitive commands no longer wiped before submission
+- **COM vtable ABI fix** — removed virtual destructors from interfaces, restored QueryInterface/AddRef/Release order (was shifted by +2)
+- **FF shader hijack fix** — texture combiner no longer overrides real pixel shaders after first fixed-function draw
+- **GetBackBuffer / GetSwapChain / CreateAdditionalSwapChain** — return `D3DERR_INVALIDCALL` instead of `D3D_OK + nullptr` (null-pointer crash)
+- **FVF vertex locations** — sequential assignment, no more normal/texcoord collision
+- **First frame init** — command buffer prepared in device constructor
 
 - **Texture combiners** — D3DTSS_COLOROP / D3DTSS_ALPHAOP now generate SPIR-V shaders at runtime for the fixed-function pipeline. Supports 26 D3DTOP operations (MODULATE, ADD, SUBTRACT, LERP, DOTPRODUCT3, etc.)
 - Fixed AddRef/Release static refcount bug

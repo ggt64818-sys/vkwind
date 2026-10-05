@@ -192,6 +192,13 @@ D3D9Device::D3D9Device(IDirect3D9* d3d, const D3DPRESENT_PARAMETERS* params)
   }
 
   setup_default_states();
+
+  // Prepare first frame's command buffer
+  if (m_cmdManager) {
+    m_cmdManager->begin_frame();
+    m_renderPassActive = false;
+    VKWIND_INFO(kTag, "First frame prepared");
+  }
 }
 
 D3D9Device::~D3D9Device() {
@@ -864,7 +871,16 @@ void D3D9Device::end_active_render_pass() {
   }
 
   VkShaderModule vsModule = useFallback ? m_fallbackVS : m_compiledVS.module;
-  VkShaderModule fsModule = m_ffFS ? m_ffFS : (useFallback ? m_fallbackFS : m_compiledPS.module);
+  VkShaderModule fsModule;
+  if (m_pixelShader && m_compiledPS.module) {
+    fsModule = m_compiledPS.module; // Real pixel shader — never use FF combiner
+  } else if (m_ffFS) {
+    fsModule = m_ffFS; // Fixed-function texture combiner
+  } else if (useFallback) {
+    fsModule = m_fallbackFS;
+  } else {
+    fsModule = m_compiledPS.module;
+  }
 
   if (!vsModule || !fsModule) {
     VKWIND_ERR(kTag, "No shader modules available");
@@ -1254,11 +1270,15 @@ void D3D9Device::SetCursorPosition(int X, int Y, uint32_t Flags) { (void)X; (voi
 int D3D9Device::ShowCursor(bool bShow) { (void)bShow; return static_cast<int>(D3D_OK); }
 
 int D3D9Device::CreateAdditionalSwapChain(D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DSwapChain9** pSwapChain) {
-  (void)pPresentationParameters; *pSwapChain = nullptr; return static_cast<int>(D3D_OK);
+  (void)pPresentationParameters;
+  if (pSwapChain) *pSwapChain = nullptr;
+  return static_cast<int>(D3DERR_INVALIDCALL);
 }
 
 int D3D9Device::GetSwapChain(uint32_t iSwapChain, IDirect3DSwapChain9** pSwapChain) {
-  (void)iSwapChain; *pSwapChain = nullptr; return static_cast<int>(D3D_OK);
+  (void)iSwapChain;
+  if (pSwapChain) *pSwapChain = nullptr;
+  return static_cast<int>(D3DERR_INVALIDCALL);
 }
 
 uint32_t D3D9Device::GetNumberOfSwapChains() { return 1; }
@@ -1288,7 +1308,6 @@ int D3D9Device::Present(const void* pSourceRect, const void* pDestRect, void* hD
   if (!m_vkSwapchain || !m_cmdManager) return static_cast<int>(D3DERR_DEVICELOST);
 
   if (m_textureManager) m_textureManager->begin_frame();
-  m_cmdManager->begin_frame();
   m_frameTempBuffers.clear();
   m_upVertexWriteOffset = 0; // Reset UP ring buffer (GPU done with previous frame)
   m_upIndexWriteOffset = 0;
@@ -1357,6 +1376,10 @@ int D3D9Device::Present(const void* pSourceRect, const void* pDestRect, void* hD
   // Advance to next frame
   m_cmdManager->advance_frame();
 
+  // Prepare next frame's command buffer (so DrawPrimitive can record into it)
+  m_cmdManager->begin_frame();
+  m_renderPassActive = false;
+
   return static_cast<int>(D3D_OK);
 }
 
@@ -1364,10 +1387,9 @@ int D3D9Device::GetBackBuffer(uint32_t iSwapChain, uint32_t iBackBuffer, uint32_
   std::lock_guard<std::mutex> lock(m_mutex);
   (void)iSwapChain; (void)iBackBuffer; (void)Type;
   if (!ppBackBuffer) return static_cast<int>(D3DERR_INVALIDCALL);
-  // Return a surface representing the current back buffer
-  // For now return nullptr - games should use GetRenderTarget instead
+  // Never return success+nullptr — games will dereference the null pointer
   *ppBackBuffer = nullptr;
-  return static_cast<int>(D3D_OK);
+  return static_cast<int>(D3DERR_INVALIDCALL);
 }
 
 int D3D9Device::GetRasterStatus(uint32_t iSwapChain, void* pRasterStatus) {
@@ -2460,9 +2482,10 @@ static void fvf_to_vk_attributes(uint32_t fvf, uint32_t stride,
   bindings.push_back({0, stride, VK_VERTEX_INPUT_RATE_VERTEX});
 
   uint32_t offset = 0;
+  uint32_t loc = 0;
   uint32_t posType = fvf & D3DFVF_POSITION_MASK;
 
-  // Position
+  // Position (location 0)
   switch (posType) {
     case D3DFVF_XYZ:
       attributes.push_back({0, 0, VK_FORMAT_R32G32B32_SFLOAT, offset});
@@ -2482,36 +2505,42 @@ static void fvf_to_vk_attributes(uint32_t fvf, uint32_t stride,
       offset += 12;
       break;
   }
+  loc = 1;
 
   // Normal
   if (fvf & D3DFVF_NORMAL) {
-    attributes.push_back({2, 0, VK_FORMAT_R32G32B32_SFLOAT, offset});
+    attributes.push_back({loc, 0, VK_FORMAT_R32G32B32_SFLOAT, offset});
     offset += 12;
+    loc++;
   }
 
   // Point size
   if (fvf & D3DFVF_PSIZE) {
-    attributes.push_back({3, 0, VK_FORMAT_R32_SFLOAT, offset});
+    attributes.push_back({loc, 0, VK_FORMAT_R32_SFLOAT, offset});
     offset += 4;
+    loc++;
   }
 
   // Diffuse color
   if (fvf & D3DFVF_DIFFUSE) {
-    attributes.push_back({1, 0, VK_FORMAT_B8G8R8A8_UNORM, offset});
+    attributes.push_back({loc, 0, VK_FORMAT_B8G8R8A8_UNORM, offset});
     offset += 4;
+    loc++;
   }
 
   // Specular color
   if (fvf & D3DFVF_SPECULAR) {
-    attributes.push_back({4, 0, VK_FORMAT_B8G8R8A8_UNORM, offset});
+    attributes.push_back({loc, 0, VK_FORMAT_B8G8R8A8_UNORM, offset});
     offset += 4;
+    loc++;
   }
 
-  // Texture coordinates — use locations 2..9 to match fallback shader (location 2 = tex0)
+  // Texture coordinates — sequential locations after all other attributes
   uint32_t texCount = (fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
   for (uint32_t i = 0; i < texCount && i < 8; i++) {
-    attributes.push_back({2 + i, 0, VK_FORMAT_R32G32_SFLOAT, offset});
+    attributes.push_back({loc, 0, VK_FORMAT_R32G32_SFLOAT, offset});
     offset += 8;
+    loc++;
   }
 }
 
@@ -2564,6 +2593,8 @@ int D3D9Device::SetPixelShader(IDirect3DPixelShader9* pShader) {
     m_pixelShader = pShader;
     m_shadersDirty = true;
     if (m_compiledPS.module) { vkDestroyShaderModule(m_vkDevice->raw(), m_compiledPS.module, nullptr); m_compiledPS = {}; }
+    // Destroy FF combiner shader — real pixel shader takes priority
+    if (m_ffFS) { vkDestroyShaderModule(m_vkDevice->raw(), m_ffFS, nullptr); m_ffFS = VK_NULL_HANDLE; }
     m_pipelineDirty = true;
   }
   return static_cast<int>(D3D_OK);
